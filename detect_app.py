@@ -241,6 +241,7 @@ def detect_picStream(imgs, imgSize=640, model_name='safety_cap', labelName=[], s
             # Apply NMS
             pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
             # Process detections
+            image_info = {}
             for i, det in enumerate(pred):  # detections per image
                 s = ''
                 if len(det):
@@ -256,15 +257,39 @@ def detect_picStream(imgs, imgSize=640, model_name='safety_cap', labelName=[], s
                         c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))  # 坐标
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
-                        if label_name in labelName:
-                            temp['cap'] = {'type': label_name}
-                        if subModel[model_name]["color"]:
-                            # 截取图片
-                            img_roi = img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
-                            # 检测颜色
-                            txt = identify_color.get_color(img_roi)
-                            temp.update(txt)
+                        info = {
+                            "conf_val": conf_val,
+                            "area": (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0])),
+                            "points": xyxy
+                        }
+                        if label_name not in image_info:
+                            image_info[label_name] = []
+                        image_info[label_name].append(info)
+                # # 未识别出对象
+                # else:
+                #     for item in labelName:
+                #         image_info[item] = []
+
+                # 循环遍历获取最明显的对象信息
+            for item in labelName:
+                # 对应label有数据
+                if item in image_info and image_info[item]:
+                    # 按照覆盖面积排序
+                    image_info[item].sort(key=lambda k: (k.get('area', 0)))
+                    # 获取面积最大的一个
+                    info = image_info[item][-1]
+                    temp['cap'] = {'type': item}
+                    if subModel[model_name]["color"]:
+                        # 截取图片
+                        xyxy = info['points']
+                        img_roi = img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+                        # 检测颜色
+                        txt = identify_color.get_color(img_roi)
+                        temp.update(txt)
+                # 对应label无数据
                 else:
+                    if item == 'safety_cap':
+                        item = 'cap'
                     temp['cap'] = {'type': "no_cap"}
                     result.append(temp)
 
@@ -615,7 +640,6 @@ def send_message(data):
 
 
 def test_cap():
-    imgs = [cv2.imread('./datasets/helmon/test/img.jpg'), cv2.imread('./datasets/helmon/test/img2.jpg')]
     subModel = {
         "safetyCap": {
             "demandLabels": "person_head",
