@@ -1,6 +1,28 @@
+import base64
+
 from PIL import Image, ImageDraw
 import cv2
 import numpy as np
+
+
+# opencv 图片转base64
+def image_to_base64(image_np):
+    image = cv2.imencode('.jpg', image_np)[1]
+    image_code = str(base64.b64encode(image))[2:-1]
+
+    return image_code
+
+
+# base64 转opencv图片
+def base64_to_image(base64_code):
+    # base64解码
+    img_data = base64.b64decode(base64_code)
+    # 转换为np数组
+    img_array = np.frombuffer(img_data, np.uint8)
+    # 转换成opencv可用格式
+    img = cv2.imdecode(img_array, cv2.COLOR_RGB2BGR)
+
+    return img
 
 
 def pre_process_image(img, polygon_points):
@@ -52,4 +74,10 @@ def cv_convert_pil(img):
 # polygon_points = [(200, 300), (1400, 300), (1400, 800), (200, 800)]  # 多边形的坐标点
 # output_path = "cropped_image.jpg"  # 裁剪后的图片路径
 # crop_image_with_polygon(image_path, polygon_points, output_path)
-
+#
+# image_path = '../../datasets/helmon/color/000027.jpg'
+# img = cv2.imread(image_path)
+# img_64 = image_to_base64(img)
+# print(img_64)
+# img_out = base64_to_image(img_64)
+# cv2.imwrite("output.jpg", img_out)

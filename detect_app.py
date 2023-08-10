@@ -11,7 +11,7 @@ import socket
 import atexit
 
 from models.experimental import attempt_load
-from utils.cut_images.cut_polygon_imgs import pre_process_image
+from utils.cut_images.cut_polygon_imgs import pre_process_image, image_to_base64
 from utils.datasets import LoadStreams, LoadImages, letterbox, LoadStreamsWithWork
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.plots import plot_one_box
@@ -22,7 +22,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 
 _weights = {
     "vedio": "weights/video.pt",
-    "safetyCap": "weights/safety_best8.pt"
+    "safetyCap": "weights/safety_best8.pt",
+    "clothes": "weights/union_best1.pt"
 }
 _models = {
 
@@ -139,7 +140,7 @@ def parse_labels(msg: dict):
     result:
          subModel ={
             "safetyCap":{
-                "demandLabels":"person_head",
+                "demandLabels":"person",
                 "labels":["safety_cap"],
                 "colors":"true"
             },
@@ -157,19 +158,19 @@ def parse_labels(msg: dict):
     except Exception as e:
         print(e)
     config_data = config_data['model']
-    label = dict(filter(lambda x: x[1]['enabled'] != 'true', labels.items()))
+    label = dict(filter(lambda x: x[1]['enabled'], labels.items()))
     subModel = {}
     if 'cap' in label:
         subModel["safetyCap"] = {
             "demandLabels": "person_head",
             "labels": ["safety_cap"],
-            "color": labels['cap']['color'] == 'true'
+            "color": labels['cap']['color']
         }
     if 'upper_body' in label or "lower_body" in label:
         subModel['clothes'] = {
             "demandLabels": "person",
             "labels": ["upper_body", "lower_body"],
-            "color": labels['upper_body']['color'] == 'true' or labels['upper_body']['color'] == 'true'
+            "color": labels['upper_body']['color'] or labels['upper_body']['color']
         }
     return subModel
 
@@ -256,6 +257,8 @@ def detect_picStream(imgs, imgSize=640, model_name='safety_cap', labelName=[], s
                     for *xyxy, conf, cls in reversed(det):
                         c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))  # 坐标
                         label_name = names[int(cls)]  # 类别
+                        if label_name not in labelName:
+                            break
                         conf_val = float(conf)  # 置信度
                         info = {
                             "conf_val": conf_val,
@@ -278,7 +281,11 @@ def detect_picStream(imgs, imgSize=640, model_name='safety_cap', labelName=[], s
                     image_info[item].sort(key=lambda k: (k.get('area', 0)))
                     # 获取面积最大的一个
                     info = image_info[item][-1]
-                    temp['cap'] = {'type': item}
+                    if item == 'safety_cap':
+                        temp['cap'] = {'type': item}
+                    else:
+                        temp[item] = {}
+
                     if subModel[model_name]["color"]:
                         # 截取图片
                         xyxy = info['points']
@@ -289,8 +296,9 @@ def detect_picStream(imgs, imgSize=640, model_name='safety_cap', labelName=[], s
                 # 对应label无数据
                 else:
                     if item == 'safety_cap':
-                        item = 'cap'
-                    temp['cap'] = {'type': "no_cap"}
+                        temp['cap'] = {'type': "no_cap"}
+                    else:
+                        temp[item] = 'unknown'
                     result.append(temp)
 
         return result
@@ -317,7 +325,6 @@ def detect(videoDatas, labels, imgSize=640, **subModel):
         print('没有可用的视频流')
         return
 
-    video_data = []
     video_data = _videoDatas
     # for i in range(len(_videoDatas)):
     #     if check_rtsp_stream(_videoDatas[i]['rtsp']):
@@ -453,26 +460,30 @@ def detect(videoDatas, labels, imgSize=640, **subModel):
                                          line_thickness=int(im0.shape[1] / 850))
 
                     for item in img_rois:
+                        p1_data = {}
                         for sm in subModel:
                             detail_info.extend(detect_picStream(img_rois[item], imgSize, model_name=sm,
                                                                 labelName=subModel[sm]['labels'],
                                                                 subModel=subModel))
+                        # detail_info.extend(p1_data)
+                    person_ids = set([i.get('id') for i in detail_info])
 
+                    detail_list_group = []
+                    for x in person_ids:
+                        temp = []
+                        for y in detail_info:
+                            if y.get('id') == x:
+                                temp.append(y)
+                        if temp:
+                            detail_list_group.append(temp)
+                    details = []
+                    for item in detail_list_group:
+                        p1 = {}
+                        for person in item:
+                            p1.update(person)
+                        details.append(p1)
                     data_all.append({"id": video_info["id"], "alarmConfigId": alarmid, "data": video_OneFrame_Data,
-                                     "detail": detail_info})
-
-                # fps_counter += 1  # 计算帧数
-                # if (time.time() - start_time) != 0:  # 实时显示帧数
-                #     out_fps = fps_counter / (time.time() - start_time)
-                #     # out_fps_list.append(out_fps)
-                #     # avg_fps = np.mean(out_fps_list)
-                #     fps_counter = 0
-                #     start_time = time.time()
-
-                # Print time (inference + NMS)
-                # print(f'{s}Done. ({(1E3 * (t2 - t1)):.1f}ms) Inference, ({(1E3 * (t3 - t2)):.1f}ms) NMS, FPS:{out_fps:.1f},AVG_FPS:{avg_fps:.2f} ')
-
-                # pipe.stdin.write(im0.tostring())
+                                     "detail": details})
 
                 # Stream results
                 if _view_img:
@@ -487,53 +498,7 @@ def detect(videoDatas, labels, imgSize=640, **subModel):
             # t0和当前时间是否大于1分钟
             if time.time() - t0 >= 1:
                 try:
-                    if len(data_all) > 0:
-                        video_list = {}
-                        for item in data_all:
-                            id = item['id']
-                            alarmId = item['alarmConfigId']
-                            id = f"{id}#{alarmId}"
-                            if id not in video_list:
-                                video_list[id] = {}
-                            for k, v in item['data'].items():
-                                if k not in video_list[id]:
-                                    video_list[id][k] = 0
-                                video_list[id][k] += v
-
-                        report_data_all = []
-                        for key in video_list:
-                            for inner_key in video_list[key]:
-                                video_list[key][inner_key] = int(round(video_list[key][inner_key] / loopCount))
-                            ids = key.split("#")
-                            id = ids[0]
-                            alarmId = ids[-1]
-
-                            detail = []
-                            # 匹配detail数据
-                            for d in data_all:
-                                if id == d['id'] and alarmId == d['alarmConfigId'] \
-                                        and video_list[key]['person'] == len(d['detail']):
-                                    detail = d['detail']
-                                    break
-                            if not detail:
-                                max_len = -1
-                                index = -1
-                                for i in range(0, len(data_all)):
-                                    if id == data_all[i]['id'] and alarmId == data_all[i]['alarmConfigId']:
-                                        if len(data_all[i]['detail']) > max_len:
-                                            max_len = len(data_all[i]['detail'])
-                                            index = i
-                                if index != -1:
-                                    detail = data_all[index]['detail'][:video_list[key]['person']]
-                                else:
-                                    detail = []
-                            report_data_all.append(
-                                {"id": id, "alarmConfigId": alarmId, "data": video_list[key],
-                                 "detail": detail})
-                        # 上报数据
-                        print(str(loopCount) + "-" + json.dumps(report_data_all))
-                        _frames = loopCount
-                        send_message(report_data_all)
+                    build_body(data_all, loopCount, im0s)
                 except Exception as e:
                     print(e)
                 t0 = time.time()
@@ -544,6 +509,61 @@ def detect(videoDatas, labels, imgSize=640, **subModel):
     except Exception as e:
         _status = False
         print(e)
+
+
+def build_body(data_all, loopCount, im0s):
+    global _frames
+    if len(data_all) > 0:
+        video_list = {}
+        for item in data_all:
+            id = item['id']
+            alarmId = item['alarmConfigId']
+            id = f"{id}#{alarmId}"
+            if id not in video_list:
+                video_list[id] = {}
+            for k, v in item['data'].items():
+                if k not in video_list[id]:
+                    video_list[id][k] = 0
+                video_list[id][k] += v
+
+        report_data_all = []
+        for key in video_list:
+            for inner_key in video_list[key]:
+                video_list[key][inner_key] = int(round(video_list[key][inner_key] / loopCount))
+            ids = key.split("#")
+            id = ids[0]
+            alarmId = ids[-1]
+
+            detail = []
+            # 匹配detail数据
+            for d in data_all:
+                if id == d['id'] and alarmId == d['alarmConfigId'] \
+                        and video_list[key]['person'] == len(d['detail']):
+                    detail = d['detail']
+                    break
+            if not detail:
+                max_len = -1
+                index = -1
+                for i in range(0, len(data_all)):
+                    if id == data_all[i]['id'] and alarmId == data_all[i]['alarmConfigId']:
+                        if len(data_all[i]['detail']) > max_len:
+                            max_len = len(data_all[i]['detail'])
+                            index = i
+                if index != -1:
+                    detail = data_all[index]['detail'][:video_list[key]['person']]
+                else:
+                    detail = []
+            report_data_all.append(
+                {"id": id,
+                 "alarmConfigId": alarmId,
+                 "time": int(time.time()),
+                 # "img": image_to_base64(im0s[alramId.index(alarmId)]),
+                 "data": video_list[key],
+                 "detail": detail})
+        # 上报数据
+        print(str(loopCount) + "-" + json.dumps(report_data_all))
+        _frames = loopCount
+        send_message(report_data_all)
 
 
 def start_detect(videoDatas, labels, imgSize, subModel={}):
