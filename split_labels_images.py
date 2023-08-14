@@ -27,6 +27,19 @@ def move_images_without_labels(old_img_path: str, old_label_path: str, new_path:
             shutil.move(f'{old_img_path}/{item}', new_path)
 
 
+def move_images_with_labels(label_path, image_path, to_path):
+    if not os.path.exists(to_path):
+        os.mkdir(to_path)
+    image_with_labels = get_paths(label_path, old_suffix='txt', new_suffix='jpg')
+    image_with_labels.extend(get_paths(label_path, old_suffix='txt', new_suffix='png'))
+    image_with_labels.extend(get_paths(label_path, old_suffix='txt', new_suffix='JPG'))
+    # 获取目录下的所有文件
+    images = get_paths(image_path)
+    for item in image_with_labels:
+        if item in images or item:
+            shutil.move(f'{image_path}//{item}', to_path)
+
+
 def clear_labels_without_images(old_img_path: str, old_label_path: str):
     if not os.path.exists(old_img_path) or not os.path.exists(old_label_path):
         raise ValueError("图片或者标注路径不存在,请确认后重试")
@@ -56,6 +69,5 @@ def test_clear_labels_without_images(old_img_path="D://project//python//datasets
 
 
 if __name__ == '__main__':
-    move_images_without_labels(old_img_path="D://project//python//datasets//safety_cap7//train//images",
-                               old_label_path="D://project//python//datasets//safety_cap7//train//labels",
-                               new_path="D://project//python//datasets//safety_cap7//train//test//")
+    clear_labels_without_images(old_img_path="D://project//python//datasets//uniform01//images",
+                               old_label_path="D://project//python//datasets//uniform01//labels")

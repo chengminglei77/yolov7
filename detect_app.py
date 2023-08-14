@@ -10,8 +10,9 @@ import json
 import socket
 import atexit
 
+from detect_img import detect_img
+from detect_img_streams import detect_img_stream, recognize_head
 from models.experimental import attempt_load
-from utils.cut_images.cut_polygon_imgs import pre_process_image, image_to_base64
 from utils.datasets import LoadStreams, LoadImages, letterbox, LoadStreamsWithWork
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.plots import plot_one_box
@@ -175,137 +176,6 @@ def parse_labels(msg: dict):
     return subModel
 
 
-# 检测图片流
-def detect_picStream(imgs, imgSize=640, model_name='safety_cap', labelName=[], subModel={}):
-    global _models
-    global _trace
-    global _status
-    try:
-        # Initialize
-        device = select_device(_device)
-        half = device.type != 'cpu'  # half precision only supported on CUDA
-        # Load model
-        model = _models[model_name] if _models[model_name] is not None else \
-            attempt_load(_weights, map_location=device)  # load FP32 model
-        stride = int(model.stride.max())  # model stride
-        imgsz = check_img_size(imgSize, s=stride)  # check img_size
-        if _trace:
-            model = TracedModel(model, device, imgsz)
-
-        if half:
-            model.half()  # to FP16
-        # 头盔颜色
-        cap_colors = []
-        count = 0
-        """
-            数据源
-        """
-        result = []
-        for img in imgs:
-            person_id = img
-            temp = {'id': person_id}
-            img0 = imgs[img]
-            # padded resize
-            img = letterbox(img0, imgsz, stride)[0]
-            # convert
-            img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-            img = np.ascontiguousarray(img)
-
-            # Get names and colors
-            names = model.module.names if hasattr(model, 'module') else model.names
-            colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-            # Run inference
-            if device.type != 'cpu':
-                model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
-            old_img_w = old_img_h = imgsz
-            old_img_b = 1
-            """
-                原本循环图片列表|视频流 修改为读取图片流
-            """
-            img = torch.from_numpy(img).to(device)
-            img = img.half() if half else img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
-
-            if device.type != 'cpu' and (
-                    old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
-                old_img_b = img.shape[0]
-                old_img_h = img.shape[2]
-                old_img_w = img.shape[3]
-                for i in range(3):
-                    model(img, augment=False)[0]
-
-            with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
-                pred = model(img, augment=False)[0]
-
-            # Apply NMS
-            pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
-            # Process detections
-            image_info = {}
-            for i, det in enumerate(pred):  # detections per image
-                s = ''
-                if len(det):
-                    # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0.shape).round()
-
-                    # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                    # Write results
-                    for *xyxy, conf, cls in reversed(det):
-                        c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))  # 坐标
-                        label_name = names[int(cls)]  # 类别
-                        if label_name not in labelName:
-                            break
-                        conf_val = float(conf)  # 置信度
-                        info = {
-                            "conf_val": conf_val,
-                            "area": (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0])),
-                            "points": xyxy
-                        }
-                        if label_name not in image_info:
-                            image_info[label_name] = []
-                        image_info[label_name].append(info)
-                # # 未识别出对象
-                # else:
-                #     for item in labelName:
-                #         image_info[item] = []
-
-                # 循环遍历获取最明显的对象信息
-            for item in labelName:
-                # 对应label有数据
-                if item in image_info and image_info[item]:
-                    # 按照覆盖面积排序
-                    image_info[item].sort(key=lambda k: (k.get('area', 0)))
-                    # 获取面积最大的一个
-                    info = image_info[item][-1]
-                    if item == 'safety_cap':
-                        temp['cap'] = {'type': item}
-                    else:
-                        temp[item] = {}
-
-                    if subModel[model_name]["color"]:
-                        # 截取图片
-                        xyxy = info['points']
-                        img_roi = img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
-                        # 检测颜色
-                        txt = identify_color.get_color(img_roi)
-                        temp.update(txt)
-                # 对应label无数据
-                else:
-                    if item == 'safety_cap':
-                        temp['cap'] = {'type': "no_cap"}
-                    else:
-                        temp[item] = 'unknown'
-                    result.append(temp)
-
-        return result
-    except Exception as e:
-        print(e)
-
-
 # 模型检测
 def detect(videoDatas, labels, imgSize=640, **subModel):
     global _videoDatas, _isShowPreview
@@ -460,12 +330,13 @@ def detect(videoDatas, labels, imgSize=640, **subModel):
                                          line_thickness=int(im0.shape[1] / 850))
 
                     for item in img_rois:
-                        p1_data = {}
                         for sm in subModel:
-                            detail_info.extend(detect_picStream(img_rois[item], imgSize, model_name=sm,
-                                                                labelName=subModel[sm]['labels'],
-                                                                subModel=subModel))
-                        # detail_info.extend(p1_data)
+                            detail_info.extend(detect_img_stream(img_rois[item], imgSize, model_name=sm,
+                                                                 labelName=subModel[sm]['labels'], _models=_models,
+                                                                 _device=_device, _trace=_trace,
+                                                                 _agnostic_nms=_agnostic_nms,
+                                                                 _conf_thres=_conf_thres, _iou_thres=_iou_thres,
+                                                                 subModel=subModel))
                     person_ids = set([i.get('id') for i in detail_info])
 
                     detail_list_group = []
@@ -673,7 +544,7 @@ def test_cap():
              "person_02": cv2.imread('./datasets/helmon/test/img2.jpg')}
 
     }
-    print(detect_picStream(img_rois['person'], 640, model_name='safetyCap',
+    print(detect_img_stream(img_rois['person'], 640, model_name='safetyCap',
                            labelName='safety_cap', subModel=subModel))
 
 
@@ -713,16 +584,33 @@ def test_tuple():
     print(result)
 
 
+def test_pic():
+    init_model()
+    img = cv2.imread('./datasets/helmon/test.jpg')
+    result = detect_img(img, _models=_models)
+    # cv2.imwrite('./output.jpg', base64_to_image(result['img']))
+    del result['img']
+    print(result)
+
+
+def test_recognize_head():
+    init_model()
+    img = cv2.imread('./datasets/helmon/test.jpg')
+    model = _models['vedio']
+    recognize_head(img, model=model)
+
+
 if __name__ == '__main__':
     # test_tuple()
     # test_LoadStream()
-    init_model()
     # test_cap()
-    thread = threading.Thread(target=con_mqtt)
-    thread.start()
+    # test_recognize_head()
+    result = test_pic()
 
-    # 防止主线程退出
-    while True:
-        time.sleep(1)
+    # init_model()
+    # thread = threading.Thread(target=con_mqtt)
+    # thread.start()
     #
-    # # detect()
+    # # 防止主线程退出
+    # while True:
+    #     time.sleep(1)
