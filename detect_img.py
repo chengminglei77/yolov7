@@ -40,6 +40,8 @@ def init_model():
     for item in _weights:
         # Load model
         _models[item] = attempt_load(_weights[item], map_location=device)  # load FP32 model
+        _models[item] = TracedModel(_models[item], device, 640)  # load FP32 model
+        # _models[item] = torch.jit.load(_weights[item])
 
 
 def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
@@ -58,8 +60,8 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             model = _models[item]
             stride = int(model.stride.max())  # model stride
             imgsz = check_img_size(imgSize, s=stride)  # check img_size
-            if _trace:
-                model = TracedModel(model, device, imgsz)
+            # if _trace:
+            #     model = TracedModel(model, device, imgsz)
 
             if half:
                 model.half()  # to FP16
