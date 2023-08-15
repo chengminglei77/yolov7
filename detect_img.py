@@ -30,7 +30,7 @@ app.config['JSON_AS_ASCII'] = False
 
 _device = 'cpu'
 _weights = {
-    "vedio": "weights/video.pt",
+    "video": "weights/video.pt",
     "safetyCap": "weights/safety_best8.pt"
 }
 _models = {
@@ -126,7 +126,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                         if names[int(c)] not in ['safety_cap']:
                             result[names[int(c)]] = int(n)
-                        if item == 'vedio' and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
+                        if item == 'video' and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
                             flag = True
 
                     # Write results
@@ -138,7 +138,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         if label_name == 'person':
                             # 修改图片
                             img_temp = recognize_head(im0,
-                                                      labelName="person_head", model=_models['vedio'])
+                                                      labelName="person_head", model=_models['video'])
 
                         elif label_name == 'safety_cap':
                             txt = identify_color.get_color(im0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
@@ -150,7 +150,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                                      line_thickness=int(im0.shape[1] / 850))
                 else:
                     flag = False
-            if item == 'vedio':
+            if item == 'video':
                 # result['img'] = image_to_base64(im0)
                 if not (img_temp is None):
                     im0 = img_temp
@@ -169,14 +169,18 @@ def petrochemical_predict():
     start = time.time()
     if request.method == 'POST':
         # 获取上传的文件,若果没有文件默认为None
-        file = request.files.get('images', None)
-        if file is None:
-            return Error(HttpCode.servererror, 'no files for upload')
-        img_name = f"./{str(uuid.uuid4())}.jpg"
-        file.save(img_name)
-        result = detect_img(img_name, _models=_models)
+        files = request.files.getlist('images', None)
+        value = request.values.get('alarmType')
+        results =[]
+        for file in files:
+            if file is None:
+                return Error(HttpCode.servererror, 'no files for upload')
+            img_name = f"./{str(uuid.uuid4())}.jpg"
+            file.save(img_name)
+            result = detect_img(img_name, _models=_models)
+            results.append(result)
         end_time = time.time()
-        return Result(HttpCode.ok, "预测成功", "耗时: {:.2f}秒".format(end_time - start), result)
+        return Result(HttpCode.ok, "预测成功", "耗时: {:.2f}秒".format(end_time - start), results)
     else:
         return Result(HttpCode.servererror, '请求方式错误,请使用post方式上传')
 
