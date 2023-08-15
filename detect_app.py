@@ -545,7 +545,7 @@ def test_cap():
 
     }
     print(detect_img_stream(img_rois['person'], 640, model_name='safetyCap',
-                           labelName='safety_cap', subModel=subModel))
+                            labelName='safety_cap', subModel=subModel))
 
 
 def test_LoadStream():
@@ -605,12 +605,12 @@ if __name__ == '__main__':
     # test_LoadStream()
     # test_cap()
     # test_recognize_head()
-    result = test_pic()
+    # result = test_pic()
 
-    # init_model()
-    # thread = threading.Thread(target=con_mqtt)
-    # thread.start()
-    #
-    # # 防止主线程退出
-    # while True:
-    #     time.sleep(1)
+    init_model()
+    thread = threading.Thread(target=con_mqtt)
+    thread.start()
+
+    # 防止主线程退出
+    while True:
+        time.sleep(1)
