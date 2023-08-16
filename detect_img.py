@@ -134,6 +134,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                 if len(det):
                     # Rescale boxes from img_size to im0 size
                     det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                    result['success'] = True
                     # Print results
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
@@ -167,6 +168,8 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         result['cap'] = {
                             'type': ['noCap']
                         }
+                    elif item == 'video':
+                        result['success'] = False
                     flag = False
             if item == 'video':
                 # result['img'] = image_to_base64(im0)
