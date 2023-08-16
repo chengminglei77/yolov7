@@ -272,4 +272,4 @@ def del_images(path):
 
 if __name__ == '__main__':
     init_model()
-    app.run(host='0.0.0.0', port=8888)
+    app.run(host='0.0.0.0', port=9898)
