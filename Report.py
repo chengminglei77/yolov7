@@ -20,7 +20,7 @@ def Error(info="", code=HttpCode.error, message="", kwargs=None):
     return jsonify(json_dict)
 
 
-def Result(code=HttpCode.ok, message="", cost="", data=None, kwargs=None):
+def Result(code=HttpCode.ok, message="", cost=0, data=None, kwargs=None):
     json_dict = {"code": code, "message": message, "cost": cost, "data": data}
     if kwargs and isinstance(kwargs, dict) and kwargs.keys():
         json_dict.update(kwargs)

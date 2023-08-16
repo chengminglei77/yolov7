@@ -31,7 +31,7 @@ app.config['JSON_AS_ASCII'] = False
 _device = 'cpu'
 _weights = {
     "video": "weights/video.pt",
-    "safetyCap": "weights/safety_best8.pt"
+    "safetyCap": "weights/cap9.pt"
 }
 _models = {
 
@@ -139,7 +139,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                        if names[int(c)] not in ['safety_cap']:
+                        if names[int(c)] not in ['safety_cap', 'no_cap']:
                             result[change_txt[names[int(c)]]] = int(n)
                         if item == 'video' and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
                             flag = True
@@ -158,7 +158,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         elif label_name == 'safety_cap':
                             txt = identify_color.get_color(im0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
                             result['cap'] = {
-                                'type': ['safetyCap'],
+                                'isHelmet': True,
                             }
                             result['cap'].update(txt)
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],
@@ -166,7 +166,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                 else:
                     if item == 'safetyCap':
                         result['cap'] = {
-                            'type': ['noCap']
+                            'isHelmet': False,
                         }
                     elif item == 'video':
                         result['success'] = False
@@ -201,7 +201,7 @@ def petrochemical_predict():
             result = detect_img(img_name, _models=_models)
             results.append(result)
         end_time = time.time()
-        return Result(HttpCode.ok, "预测成功", "耗时: {:.2f}秒".format(end_time - start), results)
+        return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)
     else:
         return Result(HttpCode.servererror, '请求方式错误,请使用post方式上传')
 
