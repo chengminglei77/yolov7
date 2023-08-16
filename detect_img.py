@@ -143,12 +143,16 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         elif label_name == 'safety_cap':
                             txt = identify_color.get_color(im0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
                             result['cap'] = {
-                                'type': label_name,
+                                'type': [label_name],
                             }
                             result['cap'].update(txt)
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],
                                      line_thickness=int(im0.shape[1] / 850))
                 else:
+                    if item == 'safetyCap':
+                        result['cap'] = {
+                            'type': ['no_cap']
+                        }
                     flag = False
             if item == 'video':
                 # result['img'] = image_to_base64(im0)
@@ -171,7 +175,7 @@ def petrochemical_predict():
         # 获取上传的文件,若果没有文件默认为None
         files = request.files.getlist('images', None)
         value = request.values.get('alarmType')
-        results =[]
+        results = []
         for file in files:
             if file is None:
                 return Error(HttpCode.servererror, 'no files for upload')
