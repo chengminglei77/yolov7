@@ -39,6 +39,20 @@ _models = {
 _status = False
 _thread_detect = None
 
+change_txt = {
+    "person": "person",
+    "person_head": "personHead",
+    "alarm_fumes": "alarmFumes",
+    "alarm_fire": "alarmFire",
+    "behavior_smoking": "behaviorSmoking",
+    "behavior_call": "behaviorCall",
+    "behavior_look_phone": "behaviorLookPhone",
+    "no_cap": "noCap",
+    "safety_cap": "safetyCap",
+    "upper_body": "upperBody",
+    "lower_body": "lowerBody"
+}
+
 
 # 加载模型
 def init_model():
@@ -125,7 +139,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                         if names[int(c)] not in ['safety_cap']:
-                            result[names[int(c)]] = int(n)
+                            result[change_txt[names[int(c)]]] = int(n)
                         if item == 'video' and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
                             flag = True
 
@@ -143,7 +157,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         elif label_name == 'safety_cap':
                             txt = identify_color.get_color(im0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
                             result['cap'] = {
-                                'type': [label_name],
+                                'type': ['safetyCap'],
                             }
                             result['cap'].update(txt)
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],
@@ -151,7 +165,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                 else:
                     if item == 'safetyCap':
                         result['cap'] = {
-                            'type': ['no_cap']
+                            'type': ['noCap']
                         }
                     flag = False
             if item == 'video':

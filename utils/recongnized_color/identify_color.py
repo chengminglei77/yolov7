@@ -72,8 +72,8 @@ def get_color(frame):
             maxsum = sum
             color = d
     result = {
-        'main_color': color,
-        'color_ratio': areas
+        'mainColor': color,
+        'colorRatio': areas
     }
     return result
 
