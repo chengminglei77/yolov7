@@ -66,7 +66,7 @@ def init_model():
 
 
 def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
-               _trace=True, _conf_thres=0.45, _iou_thres=0.45, _agnostic_nms=False):
+               _trace=True, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
     try:
         # Initialize
         img = cv2.imread(img_path)
