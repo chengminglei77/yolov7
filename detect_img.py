@@ -28,17 +28,23 @@ app = Flask(__name__)
 app.config['DEBUG'] = True
 app.config['JSON_AS_ASCII'] = False
 
-_device = 'cpu'
+# 模型名称
+_video_model = 'video'
+_cap_model = 'safetyCap'
+_uniform_model = 'uniform'
+# 模型路径
 _weights = {
-    "video": "weights/video.pt",
-    "safetyCap": "weights/cap11.pt"
+    _video_model: "weights/video.pt",
+    _cap_model: "weights/cap9.pt",
+    _uniform_model: "weights/uniform1.pt"
 }
+# 初始化模型
 _models = {
 
 }
-_status = False
-_thread_detect = None
-
+# 默认设备
+_device = 'cpu'
+# 标签名映射
 change_txt = {
     "person": "person",
     "person_head": "personHead",
@@ -47,8 +53,7 @@ change_txt = {
     "behavior_smoking": "behaviorSmoking",
     "behavior_call": "behaviorCall",
     "behavior_look_phone": "behaviorLookPhone",
-    "no_cap": "noCap",
-    "safety_cap": "safetyCap",
+    "safety_cap": "cap",
     "upper_body": "upperBody",
     "lower_body": "lowerBody"
 }
@@ -61,12 +66,8 @@ def init_model():
     for item in _weights:
         # Load model
         _models[item] = attempt_load(_weights[item], map_location=device)  # load FP32 model
-        if item == 'safetyCap':
-            img_size = 640
-        else:
-            img_size = 640
-        _models[item] = TracedModel(_models[item], device, img_size)  # load FP32 model
-        # _models[item] = torch.jit.load(_weights[item])
+        # 优化模型
+        _models[item] = TracedModel(_models[item], device, 640)  # load FP32 model
 
 
 def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
@@ -78,16 +79,15 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
         device = select_device(_device)
         half = device.type != 'cpu'  # half precision only supported on CUDA
         result = {}
+        images = {}
         # Load model
         t1 = time.time()
         img_temp = None
         for item in _models:
             model = _models[item]
             stride = int(model.stride.max())  # model stride
-            if item == "safetyCap":
-                imgsz = check_img_size(640, s=stride)  # check img_size
-            else:
-                imgsz = check_img_size(imgSize, s=stride)  # check img_size
+
+            imgsz = check_img_size(imgSize, s=stride)  # check img_size
             # if _trace:
             #     model = TracedModel(model, device, imgsz)
 
@@ -97,7 +97,13 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                     数据源
             """
             # padded resize
-            img = letterbox(im0, imgsz, stride)[0]
+            if item in images:
+                imgOs = images[item]
+                img = letterbox(images[item], imgsz, stride)[0]
+            else:
+                imgOs = im0
+                img = letterbox(im0, imgsz, stride)[0]
+            cv2.imwrite(f'{item}.jpg', imgOs)
             # convert
             img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
             img = np.ascontiguousarray(img)
@@ -134,7 +140,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
             # Process detections
             flag = False
-            if item != 'video':
+            if item != _video_model:
                 flag = True
             for i, det in enumerate(pred):  # detections per image
                 s = ''
@@ -146,9 +152,10 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                        if names[int(c)] not in ['safety_cap', 'no_cap']:
+                        # 过滤结果
+                        if names[int(c)] not in ['safety_cap', 'no_cap', 'upper_body', 'lower_body']:
                             result[change_txt[names[int(c)]]] = int(n)
-                        if item == 'video' and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
+                        if item == _video_model and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
                             flag = True
 
                     # Write results
@@ -157,33 +164,38 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
                         label = f'{names[int(cls)]} {conf:.2f}'
-                        if label_name == 'person':
+                        if item == _video_model and label_name == 'person':
                             # 修改图片
-                            img_temp = recognize_head(im0,
-                                                      labelName="person_head", model=_models['video'])
+                            images[_cap_model] = recognize_head(imgOs,
+                                                                labelName="person_head", model=_models[_video_model])
+                            images[_uniform_model] = imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
 
-                        elif label_name == 'safety_cap':
-                            txt = identify_color.get_color(im0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
-                            result['cap'] = {
-                                'isHelmet': True,
-                            }
-                            result['cap'].update(txt)
-                        plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],
-                                     line_thickness=int(im0.shape[1] / 850))
+                        elif label_name in ['upper_body', 'lower_body', 'safety_cap']:
+                            txt = identify_color.get_color(imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
+
+                            if label_name == 'safety_cap':
+                                result[change_txt[label_name]] = {
+                                    'isHelmet': True,
+                                }
+                            else:
+                                result[change_txt[label_name]] = {
+                                    'type':'other'
+                                }
+                            result[change_txt[label_name]].update(txt)
+
+                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],line_thickness=int(im0.shape[1] / 850))
                 else:
-                    if item == 'safetyCap':
+                    if item == _cap_model:
                         result['cap'] = {
                             'isHelmet': False,
                         }
-                    elif item == 'video':
+                    elif item == _video_model:
                         result['success'] = False
-                    flag = False
-            if item == 'video':
-                # result['img'] = image_to_base64(im0)
-                if not (img_temp is None):
-                    im0 = img_temp
+                        flag = False
+            # if item == 'video':
+            #    result['img'] = image_to_base64(im0)
 
-            if item == 'safetyCap' and 'cap' not in result:
+            if item == _cap_model and 'cap' not in result:
                 result['cap'] = {
                     'isHelmet': False,
                 }

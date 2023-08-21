@@ -209,10 +209,8 @@ def recognize_head(img, imgSize=640, model=None, labelName='person_head', _devic
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
                     if label_name == labelName:
-                        # cv2.imwrite(f'./{label_name}.jpg',
-                        #             img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
-                        return img0[int(xyxy[1]):int(xyxy[3]),
-                               int(xyxy[0]):int(xyxy[2])]
+                        # cv2.imwrite(f'./{label_name}.jpg', img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
+                        return img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
         return img0
     except Exception as e:
-        print(3)
+        print(e)

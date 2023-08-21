@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 from utils.recongnized_color import hsv_color_define
 
-filename = '../../datasets/helmon/color/R-c.jpg'
+filename = '../../uniform.jpg'
 
 
 # 抠图
