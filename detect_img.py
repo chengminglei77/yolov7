@@ -31,7 +31,7 @@ app.config['JSON_AS_ASCII'] = False
 _device = 'cpu'
 _weights = {
     "video": "weights/video.pt",
-    "safetyCap": "weights/cap9.pt"
+    "safetyCap": "weights/cap11.pt"
 }
 _models = {
 
@@ -61,7 +61,11 @@ def init_model():
     for item in _weights:
         # Load model
         _models[item] = attempt_load(_weights[item], map_location=device)  # load FP32 model
-        _models[item] = TracedModel(_models[item], device, 640)  # load FP32 model
+        if item == 'safetyCap':
+            img_size = 640
+        else:
+            img_size = 640
+        _models[item] = TracedModel(_models[item], device, img_size)  # load FP32 model
         # _models[item] = torch.jit.load(_weights[item])
 
 
@@ -80,7 +84,10 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
         for item in _models:
             model = _models[item]
             stride = int(model.stride.max())  # model stride
-            imgsz = check_img_size(imgSize, s=stride)  # check img_size
+            if item == "safetyCap":
+                imgsz = check_img_size(640, s=stride)  # check img_size
+            else:
+                imgsz = check_img_size(imgSize, s=stride)  # check img_size
             # if _trace:
             #     model = TracedModel(model, device, imgsz)
 
@@ -175,6 +182,11 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                 # result['img'] = image_to_base64(im0)
                 if not (img_temp is None):
                     im0 = img_temp
+
+            if item == 'safetyCap' and 'cap' not in result:
+                result['cap'] = {
+                    'isHelmet': False,
+                }
             if not flag:
                 break
             print(f'耗时：{time.time() - t1}')

@@ -26,6 +26,8 @@ def base64_to_image(base64_code):
 
 
 def pre_process_image(img, polygon_points):
+    if len(polygon_points) < 2:
+        return img
     image = cv_convert_pil(img)
     # 创建一个与原始图片相同大小的透明图片
     mask = Image.new("L", image.size, 0)
@@ -66,7 +68,6 @@ def pil_convert_opencv(img):
 # opencv转换成pil.image格式
 def cv_convert_pil(img):
     return Image.fromarray(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-
 
 # 调用示例
 #

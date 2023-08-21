@@ -69,6 +69,6 @@ def test_clear_labels_without_images(old_img_path="D://project//python//datasets
 
 
 if __name__ == '__main__':
-    move_images_without_labels(old_img_path="D://project//python//datasets//cap//images",
-                               old_label_path="D://project//python//datasets//cap//412//labels",
-                               new_path="D://project//python//datasets//cap//images1")
+    move_images_without_labels(old_img_path="D://社交//微信//WXWork//1688855425468208//Cache//File//2023-08//0816(997)//cap",
+                               old_label_path="D://project//python//datasets//safety_cap9//train//labels",
+                               new_path="D://社交//微信//WXWork//1688855425468208//Cache//File//2023-08//0816(997)//cap1")

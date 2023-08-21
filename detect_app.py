@@ -106,6 +106,7 @@ def init_model():
     for item in _weights:
         # Load model
         _models[item] = attempt_load(_weights[item], map_location=device)  # load FP32 model
+        _models[item] = TracedModel(_models[item], device, 640)  # load FP32 model
 
 
 # 解析模型参数,构造子模型任务
@@ -220,8 +221,8 @@ def detect(videoDatas, labels, imgSize=640, **subModel):
         stride = int(model.stride.max())  # model stride
         imgsz = check_img_size(_img_size, s=stride)  # check img_size
 
-        if _trace:
-            model = TracedModel(model, device, imgsz)
+        # if _trace:
+        #     model = TracedModel(model, device, imgsz)
 
         if half:
             model.half()  # to FP16
@@ -488,11 +489,12 @@ def on_connect(client, userdata, flags, rc):
     scheduler = BackgroundScheduler()
     scheduler.add_job(send_message_status, 'interval', seconds=60)
     scheduler.start()
-    atexit.register(lambda: (scheduler.remove_all_jobs(), scheduler.shutdown()))
+    # atexit.register(lambda: (scheduler.remove_all_jobs(), scheduler.shutdown()))
 
 
 # 获取消息回调
 def on_message(client, userdata, msg):
+    global _status
     print(msg.topic + " " + str(msg.payload))
     msg_obj = json.loads(msg.payload)
     if msg_obj["type"] == "start_detect":
@@ -507,6 +509,7 @@ def on_message(client, userdata, msg):
         start_detect(msg_obj["videoDatas"], msg_obj["labels"], msg_obj.get("imgSize", 640), subModel=subModel)
     elif msg_obj["type"] == "stop_detect":
         stop_detect()
+        # _status = True
 
 
 # 发送当前状态

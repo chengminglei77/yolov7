@@ -25,8 +25,8 @@ def detect_img_stream(imgs, imgSize=640, model_name='safety_cap', labelName=[], 
 
         stride = int(model.stride.max())  # model stride
         imgsz = check_img_size(imgSize, s=stride)  # check img_size
-        if _trace:
-            model = TracedModel(model, device, imgsz)
+        # if _trace:
+        #     model = TracedModel(model, device, imgsz)
 
         if half:
             model.half()  # to FP16
@@ -152,8 +152,8 @@ def recognize_head(img, imgSize=640, model=None, labelName='person_head', _devic
             raise NameError(f"model not exist,please concact system administrator")
         stride = int(model.stride.max())  # model stride
         imgsz = check_img_size(imgSize, s=stride)  # check img_size
-        if _trace:
-            model = TracedModel(model, device, imgsz)
+        # if _trace:
+        #     model = TracedModel(model, device, imgsz)
 
         if half:
             model.half()  # to FP16
