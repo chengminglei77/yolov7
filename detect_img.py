@@ -152,7 +152,6 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                             result[change_txt[names[int(c)]]] = int(n)
                         if item == _video_model and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
                             flag = True
-                    cv2.imwrite("3.jpg", imgOs)
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))  # 坐标
@@ -167,7 +166,6 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                             images[_uniform_model] = imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
 
                         elif label_name in ['upper_body', 'lower_body', 'safety_cap']:
-                            cv2.imwrite("2.jpg", imgOs)
                             txt = identify_color.get_color(imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
                             if label_name == 'safety_cap':
                                 result[change_txt[label_name]] = {
