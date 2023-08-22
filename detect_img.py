@@ -179,7 +179,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                                 }
                             else:
                                 result[change_txt[label_name]] = {
-                                    'type':'other'
+                                    'type': 'other'
                                 }
                             result[change_txt[label_name]].update(txt)
 
@@ -195,6 +195,12 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             # if item == 'video':
             #    result['img'] = image_to_base64(im0)
 
+            if result == {}:
+                flag = False
+                result = {
+                    'success': False
+                }
+
             if item == _cap_model and 'cap' not in result:
                 result['cap'] = {
                     'isHelmet': False,
@@ -207,6 +213,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
         return result
     except Exception as e:
         print(e)
+        return result
 
 
 @app.route('/WB_AI/petrochemical/report', methods=['POST'])
@@ -296,4 +303,4 @@ def del_images(path):
 
 if __name__ == '__main__':
     init_model()
-    app.run(host='0.0.0.0', port=9898)
+    app.run(host='0.0.0.0', port=9797)
