@@ -47,6 +47,7 @@ def cut_img(frame):
 
 # 处理图片
 def get_color(frame):
+    cv2.imwrite('test.jpg', frame)
     x, y, c = frame.shape
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     maxsum = -100

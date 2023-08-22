@@ -35,7 +35,7 @@ _uniform_model = 'uniform'
 # 模型路径
 _weights = {
     _video_model: "weights/video.pt",
-    _cap_model: "weights/cap9.pt",
+    _cap_model: "weights/cap10.pt",
     _uniform_model: "weights/uniform1.pt"
 }
 # 初始化模型
@@ -75,21 +75,17 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
     try:
         # Initialize
         img = cv2.imread(img_path)
-        im0 = img
+        im0 = img.copy()
         device = select_device(_device)
         half = device.type != 'cpu'  # half precision only supported on CUDA
         result = {}
         images = {}
         # Load model
         t1 = time.time()
-        img_temp = None
         for item in _models:
             model = _models[item]
             stride = int(model.stride.max())  # model stride
-
             imgsz = check_img_size(imgSize, s=stride)  # check img_size
-            # if _trace:
-            #     model = TracedModel(model, device, imgsz)
 
             if half:
                 model.half()  # to FP16
@@ -99,11 +95,11 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             # padded resize
             if item in images:
                 imgOs = images[item]
-                img = letterbox(images[item], imgsz, stride)[0]
             else:
                 imgOs = im0
-                img = letterbox(im0, imgsz, stride)[0]
-            cv2.imwrite(f'{item}.jpg', imgOs)
+            img = letterbox(imgOs.copy(), imgsz, stride)[0]
+            # cv2.imwrite(f'{item}.jpg', imgOs)
+
             # convert
             img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
             img = np.ascontiguousarray(img)
@@ -117,8 +113,8 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             old_img_w = old_img_h = imgsz
             old_img_b = 1
             """
-                    原本循环图片列表|视频流 修改为读取图片流
-                """
+               原本循环图片列表|视频流 修改为读取图片流
+            """
             img = torch.from_numpy(img).to(device)
             img = img.half() if half else img.float()  # uint8 to fp16/32
             img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -132,7 +128,6 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                 old_img_w = img.shape[3]
                 for i in range(3):
                     model(img, augment=False)[0]
-
             with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
                 pred = model(img, augment=False)[0]
 
@@ -145,8 +140,8 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             for i, det in enumerate(pred):  # detections per image
                 s = ''
                 if len(det):
-                    # Rescale boxes from img_size to im0 size
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
+                    # Rescale boxes from img_size to im0 sizes
+                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], imgOs.shape).round()
                     result['success'] = True
                     # Print results
                     for c in det[:, -1].unique():
@@ -157,13 +152,14 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                             result[change_txt[names[int(c)]]] = int(n)
                         if item == _video_model and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
                             flag = True
-
+                    cv2.imwrite("3.jpg", imgOs)
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))  # 坐标
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
                         label = f'{names[int(cls)]} {conf:.2f}'
+                        print(xyxy)
                         if item == _video_model and label_name == 'person':
                             # 修改图片
                             images[_cap_model] = recognize_head(imgOs,
@@ -171,8 +167,8 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
                             images[_uniform_model] = imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
 
                         elif label_name in ['upper_body', 'lower_body', 'safety_cap']:
+                            cv2.imwrite("2.jpg", imgOs)
                             txt = identify_color.get_color(imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
-
                             if label_name == 'safety_cap':
                                 result[change_txt[label_name]] = {
                                     'isHelmet': True,
@@ -213,6 +209,7 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
         return result
     except Exception as e:
         print(e)
+        del_images(img_path)
         return result
 
 
