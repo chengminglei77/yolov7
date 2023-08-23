@@ -1,5 +1,8 @@
 import atexit
 import json
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
 import os
 from flask import Flask, request
 import cv2
@@ -34,7 +37,7 @@ _cap_model = 'safetyCap'
 _uniform_model = 'uniform'
 # 模型路径
 _weights = {
-    _video_model: "weights/video.pt",
+    _video_model: "weights/video1.pt",
     _cap_model: "weights/cap10.pt",
     _uniform_model: "weights/uniform1.pt"
 }
@@ -57,6 +60,8 @@ change_txt = {
     "upper_body": "upperBody",
     "lower_body": "lowerBody"
 }
+# 设置线程池
+pool = ThreadPoolExecutor(max_workers=2)
 
 
 # 加载模型
@@ -70,36 +75,33 @@ def init_model():
         _models[item] = TracedModel(_models[item], device, 640)  # load FP32 model
 
 
-def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
-               _trace=True, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+# 识别模型uniform
+def detect_uniform(images, imgSize=320, _device='cpu', _conf_thres=0.25, _iou_thres=0.45,
+                   _agnostic_nms=False):
+    global _models
     try:
         # Initialize
-        img = cv2.imread(img_path)
-        im0 = img.copy()
         device = select_device(_device)
         half = device.type != 'cpu'  # half precision only supported on CUDA
-        result = {}
-        images = {}
         # Load model
+        model = _models[_uniform_model]
+
+        stride = int(model.stride.max())  # model stride
+        imgsz = check_img_size(imgSize, s=stride)  # check img_size
+
+        if half:
+            model.half()  # to FP16
         t1 = time.time()
-        for item in _models:
-            model = _models[item]
-            stride = int(model.stride.max())  # model stride
-            imgsz = check_img_size(imgSize, s=stride)  # check img_size
+        uniform_image = {
+            'upper_body': [],
+            'lower_body': []
+        }
+        for item in images:
+            # 解析图片
+            xyxy = item['points']
+            img0s = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
 
-            if half:
-                model.half()  # to FP16
-            """
-                    数据源
-            """
-            # padded resize
-            if item in images:
-                imgOs = images[item]
-            else:
-                imgOs = im0
-            img = letterbox(imgOs.copy(), imgsz, stride)[0]
-            # cv2.imwrite(f'{item}.jpg', imgOs)
-
+            img = letterbox(img0s.copy(), imgsz, stride)[0]
             # convert
             img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
             img = np.ascontiguousarray(img)
@@ -134,77 +136,243 @@ def detect_img(img_path, imgSize=640, labelName=[], _device='cpu', _models={},
             # Apply NMS
             pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
             # Process detections
-            flag = False
             if item != _video_model:
                 flag = True
             for i, det in enumerate(pred):  # detections per image
                 s = ''
                 if len(det):
                     # Rescale boxes from img_size to im0 sizes
-                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], imgOs.shape).round()
-                    result['success'] = True
+                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0s.shape).round()
                     # Print results
                     for c in det[:, -1].unique():
                         n = (det[:, -1] == c).sum()  # detections per class
                         s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                        # 过滤结果
-                        if names[int(c)] not in ['safety_cap', 'no_cap', 'upper_body', 'lower_body']:
-                            result[change_txt[names[int(c)]]] = int(n)
-                        if item == _video_model and (names[int(c)] == 'person' or names[int(c)] == 'person_head'):
-                            flag = True
+
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
-                        c1, c2 = (int(xyxy[0]), int(xyxy[1])), (int(xyxy[2]), int(xyxy[3]))  # 坐标
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
-                        label = f'{names[int(cls)]} {conf:.2f}'
-                        print(xyxy)
-                        if item == _video_model and label_name == 'person':
-                            # 修改图片
-                            images[_cap_model] = recognize_head(imgOs,
-                                                                labelName="person_head", model=_models[_video_model])
-                            images[_uniform_model] = imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+                        uniform_image[label_name].append({
+                            "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
+                            'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
+                        })
+        result = {}
+        for item in uniform_image:
+            if len(uniform_image[item]) > 0:
+                sorted(uniform_image[item], key=lambda k: (k.get('value', 0)))
+                result[change_txt[item]] = {
+                    'type': 'other',
+                }
+                txt = identify_color.get_color(uniform_image[item][-1]['image'])
+                result[change_txt[item]].update(txt)
+        return result
+    except Exception as e:
+        print(e)
+        return {}
 
-                        elif label_name in ['upper_body', 'lower_body', 'safety_cap']:
-                            txt = identify_color.get_color(imgOs[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
-                            if label_name == 'safety_cap':
-                                result[change_txt[label_name]] = {
-                                    'isHelmet': True,
-                                }
-                            else:
-                                result[change_txt[label_name]] = {
-                                    'type': 'other'
-                                }
-                            result[change_txt[label_name]].update(txt)
 
-                        # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],line_thickness=int(im0.shape[1] / 850))
+# 识别模型cap
+def detect_cap(images, imgSize=160, _device='cpu', _conf_thres=0.25, _iou_thres=0.45,
+               _agnostic_nms=False):
+    global _models
+    try:
+        # Initialize
+        device = select_device(_device)
+        half = device.type != 'cpu'  # half precision only supported on CUDA
+        # Load model
+        model = _models[_cap_model]
+
+        stride = int(model.stride.max())  # model stride
+        imgsz = check_img_size(imgSize, s=stride)  # check img_size
+
+        if half:
+            model.half()  # to FP16
+        t1 = time.time()
+        header_imgs = []
+        for item in images:
+            # 解析图片
+            xyxy = item['points']
+            img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+            # 获取人头图片
+            img0s = recognize_head(img0, labelName="person_head", model=_models[_video_model])
+            # 处理图像
+            img = letterbox(img0s.copy(), imgsz, stride)[0]
+            # convert
+            img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+            img = np.ascontiguousarray(img)
+
+            # Get names and colors
+            names = model.module.names if hasattr(model, 'module') else model.names
+            colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+            # Run inference
+            if device.type != 'cpu':
+                model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
+            old_img_w = old_img_h = imgsz
+            old_img_b = 1
+            """
+               原本循环图片列表|视频流 修改为读取图片流
+            """
+            img = torch.from_numpy(img).to(device)
+            img = img.half() if half else img.float()  # uint8 to fp16/32
+            img /= 255.0  # 0 - 255 to 0.0 - 1.0
+            if img.ndimension() == 3:
+                img = img.unsqueeze(0)
+
+            if device.type != 'cpu' and (
+                    old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
+                old_img_b = img.shape[0]
+                old_img_h = img.shape[2]
+                old_img_w = img.shape[3]
+                for i in range(3):
+                    model(img, augment=False)[0]
+            with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
+                pred = model(img, augment=False)[0]
+
+            # Apply NMS
+            pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
+            # Process detections
+            if item != _video_model:
+                flag = True
+            for i, det in enumerate(pred):  # detections per image
+                s = ''
+                if len(det):
+                    # Rescale boxes from img_size to im0 sizes
+                    det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0s.shape).round()
+                    # Print results
+                    for c in det[:, -1].unique():
+                        n = (det[:, -1] == c).sum()  # detections per class
+                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+
+                    # Write results
+                    for *xyxy, conf, cls in reversed(det):
+                        label_name = names[int(cls)]  # 类别
+                        conf_val = float(conf)  # 置信度
+                        if label_name == 'no_cap':
+                            return {'isHelmet': False}
+                        if label_name == 'safety_cap':
+                            header_imgs.append({
+                                "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
+                                'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
+                            })
                 else:
-                    if item == _cap_model:
-                        result['cap'] = {
-                            'isHelmet': False,
-                        }
-                    elif item == _video_model:
-                        result['success'] = False
-                        flag = False
-            # if item == 'video':
-            #    result['img'] = image_to_base64(im0)
+                    return {'isHelmet': False}
+        if len(header_imgs) < 1:
+            return {'isHelmet': False}
+        else:
+            # 对所有头盔的图片进行排序，取最大的一个返回颜色
+            sorted(header_imgs, key=lambda k: (k.get('value', 0)))
+            result = {
+                'isHelmet': True,
+            }
+            img = header_imgs[-1]['image']
+            result.update(identify_color.get_color(img))
+            return result
+    except Exception as e:
+        print(e)
+        return {'isHelmet': False}
 
-            if result == {}:
-                flag = False
-                result = {
-                    'success': False
-                }
 
-            if item == _cap_model and 'cap' not in result:
-                result['cap'] = {
-                    'isHelmet': False,
-                }
-            if not flag:
-                break
-            print(f'耗时：{time.time() - t1}')
-            t1 = time.time()
+# 识别模型video
+def detect_img(img_path, imgSize=480, labelName=[], _device='cpu', _models={},
+               _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+    try:
+        # Initialize
+        img = cv2.imread(img_path)
+        im0 = img.copy()
+        device = select_device(_device)
+        half = device.type != 'cpu'  # half precision only supported on CUDA
+        result = {}
+        images = {}
+        # Load model
+        t1 = time.time()
+        model = _models[_video_model]
+        stride = int(model.stride.max())  # model stride
+        imgsz = check_img_size(imgSize, s=stride)  # check img_size
+
+        if half:
+            model.half()  # to FP16
+        """
+                数据源
+        """
+        imgOs = im0
+        img = letterbox(imgOs.copy(), imgsz, stride)[0]
+
+        # convert
+        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+        img = np.ascontiguousarray(img)
+
+        # Get names and colors
+        names = model.module.names if hasattr(model, 'module') else model.names
+        colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+        # Run inference
+        if device.type != 'cpu':
+            model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
+        old_img_w = old_img_h = imgsz
+        old_img_b = 1
+        """
+           原本循环图片列表|视频流 修改为读取图片流
+        """
+        img = torch.from_numpy(img).to(device)
+        img = img.half() if half else img.float()  # uint8 to fp16/32
+        img /= 255.0  # 0 - 255 to 0.0 - 1.0
+        if img.ndimension() == 3:
+            img = img.unsqueeze(0)
+
+        if device.type != 'cpu' and (
+                old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
+            old_img_b = img.shape[0]
+            old_img_h = img.shape[2]
+            old_img_w = img.shape[3]
+            for i in range(3):
+                model(img, augment=False)[0]
+        with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
+            pred = model(img, augment=False)[0]
+
+        # Apply NMS
+        pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
+        # Process detections
+        flag = False
+        persons = []
+        for i, det in enumerate(pred):  # detections per image
+            s = ''
+            if len(det):
+                # Rescale boxes from img_size to im0 sizes
+                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], imgOs.shape).round()
+                result['success'] = True
+                # Print results
+                for c in det[:, -1].unique():
+                    n = (det[:, -1] == c).sum()  # detections per class
+                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
+                    # 过滤结果
+                    result[change_txt[names[int(c)]]] = int(n)
+
+                # Write results
+                for *xyxy, conf, cls in reversed(det):
+                    label_name = names[int(cls)]  # 类别
+                    conf_val = float(conf)  # 置信度
+                    if label_name in ['person', 'person_head']:
+                        persons.append({
+                            "image": imgOs.copy(),
+                            "conf_val": conf_val,
+                            "area": (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0])),
+                            "points": xyxy,
+                            "value": conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
+                        })
+                    # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],line_thickness=int(im0.shape[1] / 850))
+                if len(persons) >= 1:
+                    future1 = pool.submit(detect_cap, persons)
+                    future2 = pool.submit(detect_uniform, persons)
+                    # 获取安全帽信息
+                    result['cap'] = future1.result()
+                    # 获取工服信息
+                    result.update(future2.result())
+            else:
+                result['success'] = False
+
+        print(f'耗时：{time.time() - t1}')
         del_images(img_path)
         return result
+
     except Exception as e:
         print(e)
         del_images(img_path)
@@ -232,69 +400,10 @@ def petrochemical_predict():
         return Result(HttpCode.servererror, '请求方式错误,请使用post方式上传')
 
 
-#
-# # 连接MQTT服务端
-# client = mqtt.Client()
-#
-#
-# # 连接MQTT
-# def con_mqtt():
-#     try:
-#         global _config_data
-#         with open("detect-core.config", "r") as file:
-#             config_data = json.load(file)
-#             _config_data = config_data
-#             config_data = config_data['mqtt']
-#
-#         client.keep_alive = 60
-#
-#         client.username_pw_set(config_data["mqtt_user"], config_data["mqtt_password"])
-#         client.connect(config_data["mqtt_server"], config_data["mqtt_port"], 60)
-#         client.on_connect = on_connect
-#         client.on_message = on_message
-#         client.loop_start()  # 保持连接
-#     except Exception as e:
-#         print(e)
-#     while True:
-#         time.sleep(60)
-#
-#
-# # 连接回调
-# def on_connect(client, userdata, flags, rc):
-#     print("Connected with result code " + str(rc))
-#     client.subscribe("/petrochemical/Service/Command")
-#
-#
 def del_images(path):
     if os.path.exists(path):
         os.remove(path)
 
-
-# # 获取消息回调
-# def on_message(client, userdata, msg):
-#     if msg.topic == '/petrochemical/Service/Command':
-#         img_name = f"./{str(uuid.uuid4())}.jpg"
-#         # 处理消息是否为文件流数据
-#         with open(img_name, "ab") as f:
-#             f.write(msg.payload)
-#         detect_img(img_name, _models=_models)
-#
-#
-# # 发送消息对象data
-# def send_message(data):
-#     if client.is_connected():
-#         msg = json.dumps(data)
-#         client.publish("/petrochemical/Service/Data", msg, qos=0, retain=False)
-
-#
-# def mqtt():
-#     init_model()
-#     thread = threading.Thread(target=con_mqtt)
-#     thread.start()
-#
-#     # 防止主线程退出
-#     while True:
-#         time.sleep(1)
 
 if __name__ == '__main__':
     init_model()
