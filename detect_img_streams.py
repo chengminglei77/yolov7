@@ -39,7 +39,7 @@ def detect_img_stream(imgs, imgSize=640, model_name='safety_cap', labelName=[], 
             temp = {'id': person_id}
             img0 = imgs[img]
             if model_name == 'safetyCap':
-                img0 = recognize_head(img0, labelName="person_head", model=_models['vedio'])
+                flag, img0 = recognize_head(img0, labelName="person_head", model=_models['vedio'])
             # padded resize
             img = letterbox(img0, imgsz, stride)[0]
             # convert
@@ -143,7 +143,7 @@ def detect_img_stream(imgs, imgSize=640, model_name='safety_cap', labelName=[], 
 
 # 视频识别—获取person_head位置
 def recognize_head(img, imgSize=320, model=None, labelName='person_head', _device='cpu',
-                   _trace=True, _conf_thres=0.45, _iou_thres=0.45, _agnostic_nms=False):
+                   _trace=True, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
     try:
         # Initialize
         device = select_device(_device)
@@ -208,9 +208,9 @@ def recognize_head(img, imgSize=320, model=None, labelName='person_head', _devic
                 for *xyxy, conf, cls in reversed(det):
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
-                    if label_name == labelName:
+                    if label_name == labelName and conf_val >= _conf_thres:
                         # cv2.imwrite(f'./{label_name}.jpg', img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
-                        return img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
-        return img0
+                        return True, img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+        return False, img0
     except Exception as e:
         print(e)

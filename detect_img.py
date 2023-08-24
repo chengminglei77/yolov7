@@ -1,20 +1,14 @@
-import atexit
 import json
 from concurrent.futures import ThreadPoolExecutor
-import threading
 
 import os
 from flask import Flask, request
 import cv2
 import torch
 import numpy as np
-from apscheduler.schedulers.background import BackgroundScheduler
 from numpy import random
 import time
-import paho.mqtt.client as mqtt
 import uuid
-
-import threading
 
 from Report import HttpCode, Error, Result
 from detect_img_streams import recognize_head
@@ -27,13 +21,14 @@ from utils.recongnized_color import identify_color
 from utils.torch_utils import select_device, TracedModel
 
 app = Flask(__name__)
-app = Flask(__name__)
 app.config['DEBUG'] = True
 app.config['JSON_AS_ASCII'] = False
 
+# 配置路径
+_config_path = "detect_img.config"
 # 模型名称
 _video_model = 'video'
-_cap_model = 'safetyCap'
+_cap_model = 'cap'
 _uniform_model = 'uniform'
 # 模型路径
 _weights = {
@@ -60,29 +55,70 @@ change_txt = {
     "upper_body": "upperBody",
     "lower_body": "lowerBody"
 }
+# 模型和标签配置
+_config = {}
+
 # 设置线程池
 pool = ThreadPoolExecutor(max_workers=2)
 
 
+# 加载配置文件
+def load_config():
+    global _config
+    try:
+        with open(_config_path, "r") as file:
+            _config = json.load(file)
+    except Exception as e:
+        print(e)
+        _config['modelConfig'] = []
+        _config['labelConfig'] = []
+
+
+# 根据模型名称获取获取模型参数（device,imageSize）
+def parse_model_config(name=_video_model):
+    global _config
+    modelConfig = _config['modelConfig']
+
+    if modelConfig is None:
+        return select_device(_device), 480
+
+    model = [element for element in modelConfig if isinstance(element, dict) and element['name'] == name]
+    if len(model) < 1:
+        return select_device(_device), 480
+    return select_device(model[0]['device']), model[0]['imageSize']
+
+
+# 根据标签名称解析标签置信度
+def parse_label_conf_value(labelName='person'):
+    labelConfig = _config['labelConfig']
+    if labelConfig is None:
+        return 0.25
+    labels = [element for element in labelConfig if isinstance(element, dict) and element['name'] == labelName]
+    if len(labels) < 1:
+        return 0.25
+    return labels[0]['confValue']
+
+
 # 加载模型
 def init_model():
+    # 加载模型参数
+    load_config()
     # Initialize
-    device = select_device(_device)
     for item in _weights:
+        d1, size = parse_model_config(item)
         # Load model
-        _models[item] = attempt_load(_weights[item], map_location=device)  # load FP32 model
+        _models[item] = attempt_load(_weights[item], map_location=d1)  # load FP32 model
         # 优化模型
-        _models[item] = TracedModel(_models[item], device, 640)  # load FP32 model
+        _models[item] = TracedModel(_models[item], d1, size)  # load FP32 model
 
 
 # 识别模型uniform
-def detect_uniform(images, imgSize=320, _device='cpu', _conf_thres=0.25, _iou_thres=0.45,
-                   _agnostic_nms=False):
+def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
     global _models
     try:
         # Initialize
-        device = select_device(_device)
-        half = device.type != 'cpu'  # half precision only supported on CUDA
+        device, imgSize = parse_model_config(_uniform_model)
+        half = device.type != _device  # half precision only supported on CUDA
         # Load model
         model = _models[_uniform_model]
 
@@ -136,26 +172,19 @@ def detect_uniform(images, imgSize=320, _device='cpu', _conf_thres=0.25, _iou_th
             # Apply NMS
             pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
             # Process detections
-            if item != _video_model:
-                flag = True
             for i, det in enumerate(pred):  # detections per image
-                s = ''
                 if len(det):
                     # Rescale boxes from img_size to im0 sizes
                     det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0s.shape).round()
-                    # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
-                        uniform_image[label_name].append({
-                            "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
-                            'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
-                        })
+                        if conf_val >= parse_label_conf_value(labelName=label_name):
+                            uniform_image[label_name].append({
+                                "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
+                                'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
+                            })
         result = {}
         for item in uniform_image:
             if len(uniform_image[item]) > 0:
@@ -172,13 +201,12 @@ def detect_uniform(images, imgSize=320, _device='cpu', _conf_thres=0.25, _iou_th
 
 
 # 识别模型cap
-def detect_cap(images, imgSize=160, _device='cpu', _conf_thres=0.25, _iou_thres=0.45,
-               _agnostic_nms=False):
+def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
     global _models
     try:
         # Initialize
-        device = select_device(_device)
-        half = device.type != 'cpu'  # half precision only supported on CUDA
+        device, imgSize = parse_model_config(_cap_model)
+        half = device.type != _device  # half precision only supported on CUDA
         # Load model
         model = _models[_cap_model]
 
@@ -194,7 +222,12 @@ def detect_cap(images, imgSize=160, _device='cpu', _conf_thres=0.25, _iou_thres=
             xyxy = item['points']
             img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
             # 获取人头图片
-            img0s = recognize_head(img0, labelName="person_head", model=_models[_video_model])
+            flag, img0s = recognize_head(img0, labelName="person_head",
+                                         _conf_thres=parse_label_conf_value(labelName='person_head'),
+                                         model=_models[_video_model])
+            cv2.imwrite(f"{uuid.uuid4()}.jpg", img0s)
+            if not flag:
+                continue
             # 处理图像
             img = letterbox(img0s.copy(), imgsz, stride)[0]
             # convert
@@ -231,25 +264,17 @@ def detect_cap(images, imgSize=160, _device='cpu', _conf_thres=0.25, _iou_thres=
             # Apply NMS
             pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
             # Process detections
-            if item != _video_model:
-                flag = True
             for i, det in enumerate(pred):  # detections per image
-                s = ''
                 if len(det):
                     # Rescale boxes from img_size to im0 sizes
                     det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0s.shape).round()
-                    # Print results
-                    for c in det[:, -1].unique():
-                        n = (det[:, -1] == c).sum()  # detections per class
-                        s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-
                     # Write results
                     for *xyxy, conf, cls in reversed(det):
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
                         if label_name == 'no_cap':
                             return {'isHelmet': False}
-                        if label_name == 'safety_cap':
+                        if label_name == 'safety_cap' and conf_val >= parse_label_conf_value(labelName=label_name):
                             header_imgs.append({
                                 "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
                                 'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
@@ -273,16 +298,16 @@ def detect_cap(images, imgSize=160, _device='cpu', _conf_thres=0.25, _iou_thres=
 
 
 # 识别模型video
-def detect_img(img_path, imgSize=480, labelName=[], _device='cpu', _models={},
-               _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+    global _models
     try:
         # Initialize
         img = cv2.imread(img_path)
         im0 = img.copy()
-        device = select_device(_device)
-        half = device.type != 'cpu'  # half precision only supported on CUDA
+
+        device, imgSize = parse_model_config(_cap_model)
+        half = device.type != _device  # half precision only supported on CUDA
         result = {}
-        images = {}
         # Load model
         t1 = time.time()
         model = _models[_video_model]
@@ -331,25 +356,20 @@ def detect_img(img_path, imgSize=480, labelName=[], _device='cpu', _models={},
         # Apply NMS
         pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
         # Process detections
-        flag = False
         persons = []
         for i, det in enumerate(pred):  # detections per image
-            s = ''
             if len(det):
                 # Rescale boxes from img_size to im0 sizes
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], imgOs.shape).round()
                 result['success'] = True
-                # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
-                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
-                    # 过滤结果
-                    result[change_txt[names[int(c)]]] = int(n)
-
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
+                    if conf_val >= parse_label_conf_value(labelName=label_name):
+                        result[change_txt[label_name]] = result.get(change_txt[label_name], 0) + 1
+                    else:
+                        continue
                     if label_name in ['person', 'person_head']:
                         persons.append({
                             "image": imgOs.copy(),
@@ -379,6 +399,12 @@ def detect_img(img_path, imgSize=480, labelName=[], _device='cpu', _models={},
         return result
 
 
+# 删除文件
+def del_images(path):
+    if os.path.exists(path):
+        os.remove(path)
+
+
 @app.route('/WB_AI/petrochemical/report', methods=['POST'])
 def petrochemical_predict():
     start = time.time()
@@ -392,17 +418,41 @@ def petrochemical_predict():
                 return Error(HttpCode.servererror, 'no files for upload')
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
-            result = detect_img(img_name, _models=_models)
+            result = detect_img(img_name)
             results.append(result)
         end_time = time.time()
         return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)
     else:
-        return Result(HttpCode.servererror, '请求方式错误,请使用post方式上传')
+        return Error(HttpCode.servererror, '请求方式错误,请使用post方式上传')
 
 
-def del_images(path):
-    if os.path.exists(path):
-        os.remove(path)
+@app.route("/WB_AI/petrochemical/modelConfig/view", methods=['GET'])
+def view_model_config():
+    global _config
+    start = time.time()
+    load_config()
+    end_time = time.time()
+    return Result(HttpCode.ok, "查看成功", cost=round(float(end_time - start), 3), data=_config)
+
+
+@app.route("/WB_AI/petrochemical/modelConfig/update", methods=['POST'])
+def update_model_config():
+    start = time.time()
+    if request.method == 'POST':
+        modelConfig = request.json.get('modelConfig')
+        labelConfig = request.json.get('labelConfig')
+        data = {
+            'modelConfig': modelConfig,
+            'labelConfig': labelConfig
+        }
+        with open(_config_path, 'w') as f:
+            f.write(json.dumps(data, indent=4, ensure_ascii=False))
+        # 重新载入数据
+        load_config()
+        end_time = time.time()
+        return Result(HttpCode.ok, "更新成功", cost=round(float(end_time - start), 3))
+    else:
+        return Error(HttpCode.servererror, '请求方式错误,请使用post方式上传')
 
 
 if __name__ == '__main__':
