@@ -1,8 +1,9 @@
 import cv2
 import numpy as np
+from sklearn.cluster import KMeans
 from utils.recongnized_color import hsv_color_define
 
-filename = '../../datasets/uniform/28.png'
+filename = '../../datasets/uniform/58.png'
 
 
 # 抠图
@@ -45,6 +46,23 @@ def cut_img(frame):
     cv2.destroyAllWindows()
 
 
+def get_mean_color(frame, num_colors):
+    # 将图像转换为RGB格式
+    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    # 调整图像大小（可选）
+    # image = cv2.resize(image, (800, 600))
+    # 将图像转换为一维数组
+    pixels = image.reshape(-1, 3)
+    # 使用K均值聚类算法提取主要颜色
+    kmeans = KMeans(n_clusters=num_colors)
+    kmeans.fit(pixels)
+
+    # 获取聚类中心的RGB值
+    colors = kmeans.cluster_centers_
+
+    return colors.astype(int)
+
+
 # 处理图片
 def get_color(frame):
     # cv2.imwrite('test.jpg', frame)
@@ -56,7 +74,7 @@ def get_color(frame):
     color_dict = hsv_color_define.getColorList()
     for d in color_dict:
         mask = cv2.inRange(hsv, color_dict[d][0], color_dict[d][1])
-        # cv2.imwrite(d + '.jpg', mask)
+        cv2.imwrite(d + '.jpg', mask)
         binary = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)[1]
         binary = cv2.dilate(binary, None, iterations=2)
         cnts, hiera = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -82,3 +100,4 @@ def get_color(frame):
 if __name__ == '__main__':
     frame = cv2.imread(filename)
     print(get_color(frame))
+    # print(get_mean_color(frame, 2))

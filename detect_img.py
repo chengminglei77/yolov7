@@ -99,6 +99,20 @@ def parse_label_conf_value(labelName='person'):
     return labels[0]['confValue']
 
 
+# 根据模型获取基础置信度
+def parase_model_conf_value(modelName='video'):
+    global _config
+    modelConfig = _config['modelConfig']
+
+    if modelConfig is None:
+        return 0.25
+
+    model = [element for element in modelConfig if isinstance(element, dict) and element['name'] == modelName]
+    if len(model) < 1:
+        return 0.25
+    return model[0]['confValue']
+
+
 # 加载模型
 def init_model():
     # 加载模型参数
@@ -262,7 +276,8 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
                 pred = model(img, augment=False)[0]
 
             # Apply NMS
-            pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
+            pred = non_max_suppression(pred, parase_model_conf_value(_video_model), _iou_thres, classes=None,
+                                       agnostic=_agnostic_nms)
             # Process detections
             for i, det in enumerate(pred):  # detections per image
                 if len(det):
