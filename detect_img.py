@@ -30,11 +30,14 @@ _config_path = "detect_img.config"
 _video_model = 'video'
 _cap_model = 'cap'
 _uniform_model = 'uniform'
+_reflective_model = 'reflective'
 # 模型路径
 _weights = {
     _video_model: "weights/video1.pt",
     _cap_model: "weights/cap10.pt",
-    _uniform_model: "weights/uniform1.pt"
+    _uniform_model: "weights/uniform1.pt",
+    _reflective_model: "weights/reflective1.pt"
+
 }
 # 初始化模型
 _models = {
@@ -126,6 +129,71 @@ def init_model():
         _models[item] = TracedModel(_models[item], d1, size)  # load FP32 model
 
 
+# 预处理图片
+def pre_parse_img(model, img, stride, imgsz, device, half):
+    img = letterbox(img, imgsz, stride)[0]
+    # convert
+    img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
+    img = np.ascontiguousarray(img)
+    img = torch.from_numpy(img).to(device)
+    img = img.half() if half else img.float()  # uint8 to fp16/32
+    img /= 255.0  # 0 - 255 to 0.0 - 1.0
+    if img.ndimension() == 3:
+        img = img.unsqueeze(0)
+    if device.type != _device:
+        model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
+    old_img_w = old_img_h = imgsz
+    old_img_b = 1
+
+    if device.type != _device and (
+            old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
+        old_img_b = img.shape[0]
+        old_img_h = img.shape[2]
+        old_img_w = img.shape[3]
+        for i in range(3):
+            model(img, augment=False)[0]
+    with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
+        pred = model(img, augment=False)[0]
+
+    return pred, img
+
+
+def detect_cloth_type(img, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+    global _models
+    try:
+        # Initialize
+        device, imgSize = parse_model_config(_reflective_model)
+        half = device.type != _device  # half precision only supported on CUDA
+        # Load model
+        model = _models[_uniform_model]
+
+        stride = int(model.stride.max())  # model stride
+        imgsz = check_img_size(imgSize, s=stride)  # check img_size
+
+        if half:
+            model.half()  # to FP16
+        t1 = time.time()
+        img0s = img.copy()
+        # Get names and colors
+        names = model.module.names if hasattr(model, 'module') else model.names
+        colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
+
+        pred, img = pre_parse_img(model=model, img=img0s, stride=stride, imgsz=imgsz, device=device,
+                                  half=half)
+
+        # Apply NMS
+        pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
+        # Process detections
+        for i, det in enumerate(pred):  # detections per image
+            if len(det):
+                return 'reflective'
+        return 'other'
+
+    except Exception as e:
+        print(e)
+        return 'other'
+
+
 # 识别模型uniform
 def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
     global _models
@@ -151,37 +219,12 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
             xyxy = item['points']
             img0s = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
 
-            img = letterbox(img0s.copy(), imgsz, stride)[0]
-            # convert
-            img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-            img = np.ascontiguousarray(img)
-
             # Get names and colors
             names = model.module.names if hasattr(model, 'module') else model.names
             colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-            # Run inference
-            if device.type != 'cpu':
-                model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
-            old_img_w = old_img_h = imgsz
-            old_img_b = 1
-            """
-               原本循环图片列表|视频流 修改为读取图片流
-            """
-            img = torch.from_numpy(img).to(device)
-            img = img.half() if half else img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
 
-            if device.type != 'cpu' and (
-                    old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
-                old_img_b = img.shape[0]
-                old_img_h = img.shape[2]
-                old_img_w = img.shape[3]
-                for i in range(3):
-                    model(img, augment=False)[0]
-            with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
-                pred = model(img, augment=False)[0]
+            pred, img = pre_parse_img(model=model, img=img0s.copy(), stride=stride, imgsz=imgsz, device=device,
+                                      half=half)
 
             # Apply NMS
             pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
@@ -208,6 +251,9 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
                 }
                 txt = identify_color.get_color(uniform_image[item][-1]['image'])
                 result[change_txt[item]].update(txt)
+                if item == 'upper_body':
+                    type = detect_cloth_type(uniform_image[item][-1]['image'])
+                    result[change_txt[item]]['type'] = type
         return result
     except Exception as e:
         print(e)
@@ -239,42 +285,14 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
             flag, img0s = recognize_head(img0, labelName="person_head",
                                          _conf_thres=parse_label_conf_value(labelName='person_head'),
                                          model=_models[_video_model])
-            cv2.imwrite(f"{uuid.uuid4()}.jpg", img0s)
+            # cv2.imwrite(f"{uuid.uuid4()}.jpg", img0s)
             if not flag:
                 continue
-            # 处理图像
-            img = letterbox(img0s.copy(), imgsz, stride)[0]
-            # convert
-            img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-            img = np.ascontiguousarray(img)
-
             # Get names and colors
             names = model.module.names if hasattr(model, 'module') else model.names
             colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
-            # Run inference
-            if device.type != 'cpu':
-                model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
-            old_img_w = old_img_h = imgsz
-            old_img_b = 1
-            """
-               原本循环图片列表|视频流 修改为读取图片流
-            """
-            img = torch.from_numpy(img).to(device)
-            img = img.half() if half else img.float()  # uint8 to fp16/32
-            img /= 255.0  # 0 - 255 to 0.0 - 1.0
-            if img.ndimension() == 3:
-                img = img.unsqueeze(0)
-
-            if device.type != 'cpu' and (
-                    old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
-                old_img_b = img.shape[0]
-                old_img_h = img.shape[2]
-                old_img_w = img.shape[3]
-                for i in range(3):
-                    model(img, augment=False)[0]
-            with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
-                pred = model(img, augment=False)[0]
-
+            pred, img = pre_parse_img(model=model, img=img0s.copy(), stride=stride, imgsz=imgsz, device=device,
+                                      half=half)
             # Apply NMS
             pred = non_max_suppression(pred, parase_model_conf_value(_video_model), _iou_thres, classes=None,
                                        agnostic=_agnostic_nms)
@@ -335,38 +353,12 @@ def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False)
                 数据源
         """
         imgOs = im0
-        img = letterbox(imgOs.copy(), imgsz, stride)[0]
-
-        # convert
-        img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
-        img = np.ascontiguousarray(img)
 
         # Get names and colors
         names = model.module.names if hasattr(model, 'module') else model.names
         colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
         # Run inference
-        if device.type != 'cpu':
-            model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
-        old_img_w = old_img_h = imgsz
-        old_img_b = 1
-        """
-           原本循环图片列表|视频流 修改为读取图片流
-        """
-        img = torch.from_numpy(img).to(device)
-        img = img.half() if half else img.float()  # uint8 to fp16/32
-        img /= 255.0  # 0 - 255 to 0.0 - 1.0
-        if img.ndimension() == 3:
-            img = img.unsqueeze(0)
-
-        if device.type != 'cpu' and (
-                old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
-            old_img_b = img.shape[0]
-            old_img_h = img.shape[2]
-            old_img_w = img.shape[3]
-            for i in range(3):
-                model(img, augment=False)[0]
-        with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
-            pred = model(img, augment=False)[0]
+        pred, img = pre_parse_img(model=model, img=imgOs.copy(), stride=stride, imgsz=imgsz, device=device, half=half)
 
         # Apply NMS
         pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)

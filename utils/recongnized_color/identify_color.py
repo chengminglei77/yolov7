@@ -3,7 +3,7 @@ import numpy as np
 from sklearn.cluster import KMeans
 from utils.recongnized_color import hsv_color_define
 
-filename = '../../datasets/uniform/58.png'
+filename = '../../datasets/uniform/33.jpg'
 
 
 # 抠图
@@ -74,7 +74,7 @@ def get_color(frame):
     color_dict = hsv_color_define.getColorList()
     for d in color_dict:
         mask = cv2.inRange(hsv, color_dict[d][0], color_dict[d][1])
-        cv2.imwrite(d + '.jpg', mask)
+        # cv2.imwrite(d + '.jpg', mask)
         binary = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)[1]
         binary = cv2.dilate(binary, None, iterations=2)
         cnts, hiera = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
