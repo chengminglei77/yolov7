@@ -2,8 +2,9 @@ import cv2
 import numpy as np
 from sklearn.cluster import KMeans
 from utils.recongnized_color import hsv_color_define
+import uuid
 
-filename = '../../datasets/uniform/33.jpg'
+filename = '../../datasets/color/36.png'
 
 
 # 抠图

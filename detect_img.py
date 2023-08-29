@@ -33,7 +33,7 @@ _uniform_model = 'uniform'
 _reflective_model = 'reflective'
 # 模型路径
 _weights = {
-    _video_model: "weights/video1.pt",
+    _video_model: "weights/video.pt",
     _cap_model: "weights/cap10.pt",
     _uniform_model: "weights/uniform1.pt",
     _reflective_model: "weights/reflective1.pt"
@@ -377,7 +377,7 @@ def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False)
                         result[change_txt[label_name]] = result.get(change_txt[label_name], 0) + 1
                     else:
                         continue
-                    if label_name in ['person', 'person_head']:
+                    if label_name in ['person']:
                         persons.append({
                             "image": imgOs.copy(),
                             "conf_val": conf_val,
