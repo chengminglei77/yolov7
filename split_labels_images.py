@@ -73,5 +73,6 @@ def test_clear_labels_without_images(old_img_path="D://project//python//datasets
 
 
 if __name__ == '__main__':
-    clear_labels_without_images(old_img_path="D://data//datasets//safety_cap10//valid//images",
-                               old_label_path="D://data//datasets//safety_cap10//valid//labels")
+    move_images_without_labels(old_img_path="D://data//datasets//safety_cap11//train//images",
+                               old_label_path="D://data//datasets//safety_cap11//train//labels",
+                               new_path="D://data//datasets//safety_cap11//train//test")

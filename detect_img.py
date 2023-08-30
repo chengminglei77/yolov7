@@ -34,7 +34,7 @@ _reflective_model = 'reflective'
 # 模型路径
 _weights = {
     _video_model: "weights/video.pt",
-    _cap_model: "weights/cap10.pt",
+    _cap_model: "weights/best.pt",
     _uniform_model: "weights/uniform1.pt",
     _reflective_model: "weights/reflective1.pt"
 
@@ -174,6 +174,8 @@ def detect_cloth_type(img, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
             model.half()  # to FP16
         t1 = time.time()
         img0s = img.copy()
+        # 图片添加白框
+        img0s = cv2.copyMakeBorder(img0s, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
         # Get names and colors
         names = model.module.names if hasattr(model, 'module') else model.names
         colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
@@ -218,6 +220,9 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
             # 解析图片
             xyxy = item['points']
             img0s = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+
+            # 给图片填充白框
+            img0s = cv2.copyMakeBorder(img0s, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
 
             # Get names and colors
             names = model.module.names if hasattr(model, 'module') else model.names
@@ -281,6 +286,8 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
             # 解析图片
             xyxy = item['points']
             img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+            # 给图片填充白框
+            img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
             # 获取人头图片
             flag, img0s = recognize_head(img0, labelName="person_head",
                                          _conf_thres=parse_label_conf_value(labelName='person_head'),
@@ -331,14 +338,18 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
 
 
 # 识别模型video
-def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _agnostic_nms=False):
     global _models
     try:
         # Initialize
         img = cv2.imread(img_path)
+        if is_padding:
+            # img = cv2.copyMakeBorder(img, int(img.shape[0] * 0.2), int(img.shape[0] * 0.2), int(img.shape[1] * 0.2),
+            #                          int(img.shape[1] * 0.2), cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            img = cv2.copyMakeBorder(img, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
         im0 = img.copy()
 
-        device, imgSize = parse_model_config(_cap_model)
+        device, imgSize = parse_model_config(_video_model)
         half = device.type != _device  # half precision only supported on CUDA
         result = {}
         # Load model
@@ -368,15 +379,17 @@ def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False)
             if len(det):
                 # Rescale boxes from img_size to im0 sizes
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], imgOs.shape).round()
-                result['success'] = True
+
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
-                    if conf_val >= parse_label_conf_value(labelName=label_name):
-                        result[change_txt[label_name]] = result.get(change_txt[label_name], 0) + 1
-                    else:
+                    if conf_val < parse_label_conf_value(labelName=label_name):
                         continue
+                    result[change_txt[label_name]] = result.get(change_txt[label_name], 0) + 1
+                    if 'success' not in result:
+                        result['success'] = True
+
                     if label_name in ['person']:
                         persons.append({
                             "image": imgOs.copy(),
@@ -385,7 +398,6 @@ def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False)
                             "points": xyxy,
                             "value": conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
                         })
-                    # plot_one_box(xyxy, im0, label=label, color=colors[int(cls)],line_thickness=int(im0.shape[1] / 850))
                 if len(persons) >= 1:
                     future1 = pool.submit(detect_cap, persons)
                     future2 = pool.submit(detect_uniform, persons)
@@ -393,9 +405,9 @@ def detect_img(img_path, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False)
                     result['cap'] = future1.result()
                     # 获取工服信息
                     result.update(future2.result())
-            else:
-                result['success'] = False
 
+        if 'success' not in result:
+            result['success'] = False
         print(f'耗时：{time.time() - t1}')
         del_images(img_path)
         return result
@@ -418,14 +430,14 @@ def petrochemical_predict():
     if request.method == 'POST':
         # 获取上传的文件,若果没有文件默认为None
         files = request.files.getlist('images', None)
-        value = request.values.get('alarmType')
+        is_padding = request.values.get('isPadding', False)
         results = []
         for file in files:
             if file is None:
                 return Error(HttpCode.servererror, 'no files for upload')
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
-            result = detect_img(img_name)
+            result = detect_img(img_name, is_padding=is_padding)
             results.append(result)
         end_time = time.time()
         return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)
