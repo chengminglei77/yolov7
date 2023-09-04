@@ -34,7 +34,7 @@ _reflective_model = 'reflective'
 # 模型路径
 _weights = {
     _video_model: "weights/video.pt",
-    _cap_model: "weights/best.pt",
+    _cap_model: "weights/cap.pt",
     _uniform_model: "weights/uniform1.pt",
     _reflective_model: "weights/reflective1.pt"
 
@@ -286,13 +286,14 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
             # 解析图片
             xyxy = item['points']
             img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
-            # 给图片填充白框
-            img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+
             # 获取人头图片
             flag, img0s = recognize_head(img0, labelName="person_head",
                                          _conf_thres=parse_label_conf_value(labelName='person_head'),
                                          model=_models[_video_model])
-            # cv2.imwrite(f"{uuid.uuid4()}.jpg", img0s)
+            # 给图片填充白框
+            img0s = cv2.copyMakeBorder(img0s, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            # cv2.imwrite("s.jpg", img0s)
             if not flag:
                 continue
             # Get names and colors
@@ -301,7 +302,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
             pred, img = pre_parse_img(model=model, img=img0s.copy(), stride=stride, imgsz=imgsz, device=device,
                                       half=half)
             # Apply NMS
-            pred = non_max_suppression(pred, parase_model_conf_value(_video_model), _iou_thres, classes=None,
+            pred = non_max_suppression(pred, parase_model_conf_value(_cap_model), _iou_thres, classes=None,
                                        agnostic=_agnostic_nms)
             # Process detections
             for i, det in enumerate(pred):  # detections per image
@@ -315,6 +316,8 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
                         if label_name == 'no_cap':
                             return {'isHelmet': False}
                         if label_name == 'safety_cap' and conf_val >= parse_label_conf_value(labelName=label_name):
+                            label = f'{names[int(cls)]} {conf:.2f}'
+                            plot_one_box(xyxy, img0s, label=label, color=colors[int(cls)], line_thickness=1)
                             header_imgs.append({
                                 "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
                                 'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
@@ -323,30 +326,35 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
                     return {'isHelmet': False}
         if len(header_imgs) < 1:
             return {'isHelmet': False}
-        else:
-            # 对所有头盔的图片进行排序，取最大的一个返回颜色
-            sorted(header_imgs, key=lambda k: (k.get('value', 0)))
-            result = {
-                'isHelmet': True,
-            }
-            img = header_imgs[-1]['image']
-            result.update(identify_color.get_color(img))
-            return result
+        # 对所有头盔的图片进行排序，取最大的一个返回颜色
+        sorted(header_imgs, key=lambda k: (k.get('value', 0)))
+        result = {
+            'isHelmet': True,
+        }
+        img = header_imgs[-1]['image']
+        result.update(identify_color.get_color(img))
+        return result
     except Exception as e:
         print(e)
         return {'isHelmet': False}
 
 
 # 识别模型video
-def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _agnostic_nms=False):
+def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _agnostic_nms=False, is_cut=False):
     global _models
     try:
         # Initialize
         img = cv2.imread(img_path)
+        # 是否对图片添加白框
         if is_padding:
             # img = cv2.copyMakeBorder(img, int(img.shape[0] * 0.2), int(img.shape[0] * 0.2), int(img.shape[1] * 0.2),
             #                          int(img.shape[1] * 0.2), cv2.BORDER_CONSTANT, value=[255, 255, 255])
             img = cv2.copyMakeBorder(img, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+        # 是否截取图片
+        if is_cut:
+            img = identify_color.cut_rect_image(img)
+            cv2.imwrite(f'./output/person-{uuid.uuid4()}.jpg', img)
+
         im0 = img.copy()
 
         device, imgSize = parse_model_config(_video_model)
@@ -431,13 +439,20 @@ def petrochemical_predict():
         # 获取上传的文件,若果没有文件默认为None
         files = request.files.getlist('images', None)
         is_padding = request.values.get('isPadding', False)
+        alarm_type = request.values.get('alarmType', "no_safetycap")
+        image_type = request.values.get('imageType', -1)
+        if image_type == -1 and alarm_type == 'person_off_duty_querying':
+            is_cut = True
+        else:
+            is_cut = (int(image_type) == 1)
+
         results = []
         for file in files:
             if file is None:
                 return Error(HttpCode.servererror, 'no files for upload')
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
-            result = detect_img(img_name, is_padding=is_padding)
+            result = detect_img(img_name, is_padding=is_padding, is_cut=is_cut)
             results.append(result)
         end_time = time.time()
         return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)

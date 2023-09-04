@@ -1,17 +1,32 @@
 import cv2
 import numpy as np
-from sklearn.cluster import KMeans
+# from sklearn.cluster import KMeans
 from utils.recongnized_color import hsv_color_define
 import uuid
 
-filename = '../../datasets/color/36.png'
+filename = '../../datasets/1.jpg'
+
+change_txt = {
+    "black": "black",
+    "black1": "black",
+    "gray": "gray",
+    "gray1": "gray",
+    "white": "white",
+    "red": "red",
+    "red2": "red1",
+    "orange": "orange",
+    "yellow": "yellow",
+    "green": "green",
+    "cyan": "cyan",
+    "blue": "blue",
+    "purple": "purple"
+}
 
 
 # 抠图
 def cut_img(frame):
     img2 = frame.copy()
     mask = np.zeros(frame.shape[:2], dtype=np.uint8)
-    print(get_color(frame))
     rect = (2, 1, frame.shape[0], frame.shape[1])
     # 背景模型： 用于grabcut计算，如果为null，则函数内部会自动创建一个bgModel,必须时单通道浮点型,且行数只能为1，列数只能为13*5
     bgdmodel = np.zeros((1, 65), np.float64)
@@ -47,21 +62,21 @@ def cut_img(frame):
     cv2.destroyAllWindows()
 
 
-def get_mean_color(frame, num_colors):
-    # 将图像转换为RGB格式
-    image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    # 调整图像大小（可选）
-    # image = cv2.resize(image, (800, 600))
-    # 将图像转换为一维数组
-    pixels = image.reshape(-1, 3)
-    # 使用K均值聚类算法提取主要颜色
-    kmeans = KMeans(n_clusters=num_colors)
-    kmeans.fit(pixels)
-
-    # 获取聚类中心的RGB值
-    colors = kmeans.cluster_centers_
-
-    return colors.astype(int)
+# def get_mean_color(frame, num_colors):
+#     # 将图像转换为RGB格式
+#     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+#     # 调整图像大小（可选）
+#     # image = cv2.resize(image, (800, 600))
+#     # 将图像转换为一维数组
+#     pixels = image.reshape(-1, 3)
+#     # 使用K均值聚类算法提取主要颜色
+#     kmeans = KMeans(n_clusters=num_colors)
+#     kmeans.fit(pixels)
+#
+#     # 获取聚类中心的RGB值
+#     colors = kmeans.cluster_centers_
+#
+#     return colors.astype(int)
 
 
 # 处理图片
@@ -75,15 +90,14 @@ def get_color(frame):
     color_dict = hsv_color_define.getColorList()
     for d in color_dict:
         mask = cv2.inRange(hsv, color_dict[d][0], color_dict[d][1])
-        # cv2.imwrite(d + '.jpg', mask)
+        # cv2.imwrite(f'{d}.jpg', mask)
         binary = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)[1]
         binary = cv2.dilate(binary, None, iterations=2)
         cnts, hiera = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
         sum = 0
         for c in cnts:
             sum += cv2.contourArea(c)
-        if d == 'red2':
-            d = 'red'
+        d = change_txt[d]
         if d not in areas:
             areas[d] = round(sum / (x * y), 4)
         else:
@@ -98,7 +112,90 @@ def get_color(frame):
     return result
 
 
+# 处理图片
+def deal_color(frame, name):
+    x, y, c = frame.shape
+    hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    maxsum = -100
+    color = None
+    areas = {}
+    color_dict = hsv_color_define.getColorList()
+    for d in color_dict:
+        mask = cv2.inRange(hsv, color_dict[d][0], color_dict[d][1])
+        cv2.imwrite(f'.\\runs\\color\\{name}-{d}.jpg', mask)
+        binary = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY)[1]
+        binary = cv2.dilate(binary, None, iterations=2)
+        cnts, hiera = cv2.findContours(binary.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        sum = 0
+        for c in cnts:
+            sum += cv2.contourArea(c)
+        d = change_txt[d]
+        if d not in areas:
+            areas[d] = round(sum / (x * y), 4)
+        else:
+            areas[d] = max(areas[d], round(sum / (x * y), 4))
+        if sum > maxsum:
+            maxsum = sum
+            color = d
+    result = {
+        'mainColor': color,
+        'colorRatio': areas
+    }
+    print(f"{name}:{result}")
+
+
+def cut_rect_image(image):
+    # 将图片从BGR颜色空间转换为HSV颜色空间
+    hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+    # 定义红色的HSV范围
+    lower_red = np.array([0, 50, 45])
+    upper_red = np.array([10, 255, 255])
+    mask1 = cv2.inRange(hsv, lower_red, upper_red)
+    lower_red = np.array([170, 50, 45])
+    upper_red = np.array([180, 255, 255])
+    mask2 = cv2.inRange(hsv, lower_red, upper_red)
+    # 合并红色的掩码
+    mask_red = cv2.bitwise_or(mask1, mask2)
+
+    # 定义橙色的HSV范围
+    lower_orange = np.array([11, 105, 100])
+    upper_orange = np.array([25, 255, 255])
+    mask3 = cv2.inRange(hsv, lower_orange, upper_orange)
+    # # 合并红色和橙色的掩码
+    mask = cv2.bitwise_or(mask_red, mask3)
+
+    # 去除黄色内容
+    lower_yellow = np.array([26, 50, 50])
+    upper_yellow = np.array([34, 255, 255])
+    mask_yellow = cv2.inRange(hsv, lower_yellow, upper_yellow)
+    mask = cv2.bitwise_and(mask, cv2.bitwise_not(mask_yellow))
+
+    # 执行膨胀操作，将像素1的线框进行加粗处理
+    kernel = np.ones((3, 3), np.uint8)
+    mask = cv2.dilate(mask, kernel, iterations=1)
+
+    # 找到红色线框的轮廓
+    contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    # 找到最大的闭环红色线框
+    max_contour = None
+    max_area = 0
+    for contour in contours:
+        area = cv2.contourArea(contour)
+        if area > max_area:
+            max_area = area
+            max_contour = contour
+
+    # 创建一个与原始图像大小相同的空白图像，将闭环的红色线框内的内容抠出来
+    mask = np.zeros_like(image)
+    try:
+        cv2.drawContours(mask, [max_contour], 0, (255, 255, 255), -1)
+        result = cv2.bitwise_and(image, mask)
+        return result
+    except Exception as e:
+        return image
+
+
 if __name__ == '__main__':
     frame = cv2.imread(filename)
     print(get_color(frame))
-    # print(get_mean_color(frame, 2))

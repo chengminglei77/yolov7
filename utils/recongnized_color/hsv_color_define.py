@@ -11,19 +11,34 @@ def getColorList():
 
     # 黑色
     lower_black = np.array([0, 0, 0])
-    upper_black = np.array([180, 255, 38])
+    upper_black = np.array([180, 255, 32])
     color_list = []
     color_list.append(lower_black)
     color_list.append(upper_black)
     dict['black'] = color_list
 
-    # #灰色
-    # lower_gray = np.array([0, 0, 46])
-    # upper_gray = np.array([180, 43, 220])
-    # color_list = []
-    # color_list.append(lower_gray)
-    # color_list.append(upper_gray)
-    # dict['gray']=color_list
+    # 添加红、橙色的黑色区域
+    lower_black = np.array([0, 55, 38])
+    upper_black = np.array([25, 255, 80])
+    color_list = []
+    color_list.append(lower_black)
+    color_list.append(upper_black)
+    dict['black1'] = color_list
+
+    # 灰色
+    lower_gray = np.array([0, 38, 100])
+    upper_gray = np.array([180, 65, 220])
+    color_list = []
+    color_list.append(lower_gray)
+    color_list.append(upper_gray)
+    dict['gray'] = color_list
+    # 添加红色的灰色区域
+    lower_gray = np.array([92, 35, 100])
+    upper_gray = np.array([130, 255, 220])
+    color_list = []
+    color_list.append(lower_gray)
+    color_list.append(upper_gray)
+    dict['gray1'] = color_list
 
     # 白色
     lower_white = np.array([0, 0, 200])
@@ -42,7 +57,7 @@ def getColorList():
     dict['red'] = color_list
 
     # 红色2
-    lower_red = np.array([0, 55, 38])
+    lower_red = np.array([0, 55, 85])
     upper_red = np.array([10, 255, 255])
     color_list = []
     color_list.append(lower_red)
@@ -50,7 +65,7 @@ def getColorList():
     dict['red2'] = color_list
 
     # 橙色
-    lower_orange = np.array([11, 55, 38])
+    lower_orange = np.array([11, 55, 85])
     upper_orange = np.array([25, 255, 255])
     color_list = []
     color_list.append(lower_orange)
@@ -58,8 +73,8 @@ def getColorList():
     dict['orange'] = color_list
 
     # 黄色
-    lower_yellow = np.array([20, 38, 38])
-    upper_yellow = np.array([34, 255, 255])
+    lower_yellow = np.array([20, 30, 30])
+    upper_yellow = np.array([40, 255, 255])
     color_list = []
     color_list.append(lower_yellow)
     color_list.append(upper_yellow)
@@ -82,7 +97,7 @@ def getColorList():
     dict['cyan'] = color_list
 
     # 蓝色
-    lower_blue = np.array([92, 38, 38])
+    lower_blue = np.array([92, 35, 35])
     upper_blue = np.array([130, 255, 255])
     color_list = []
     color_list.append(lower_blue)

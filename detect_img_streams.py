@@ -193,24 +193,26 @@ def recognize_head(img, imgSize=320, model=None, labelName='person_head', _devic
 
         # Apply NMS
         pred = non_max_suppression(pred, _conf_thres, _iou_thres, classes=None, agnostic=_agnostic_nms)
+        header_imgs = []
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             s = ''
             if len(det):
                 # Rescale boxes from img_size to im0 size
                 det[:, :4] = scale_coords(img.shape[2:], det[:, :4], img0.shape).round()
-
-                # Print results
-                for c in det[:, -1].unique():
-                    n = (det[:, -1] == c).sum()  # detections per class
-                    s += f"{n} {names[int(c)]}{'s' * (n > 1)}, "  # add to string
                 # Write results
                 for *xyxy, conf, cls in reversed(det):
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
                     if label_name == labelName and conf_val >= _conf_thres:
-                        # cv2.imwrite(f'./{label_name}.jpg', img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
-                        return True, img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+                        header_imgs.append({
+                            'conf': conf_val,
+                            'image': img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+                        })
+        if len(header_imgs) >= 1:
+            sorted(header_imgs, key=lambda k: (k.get('conf', 0)))
+            return True, header_imgs[0]['image']
+
         return False, img0
     except Exception as e:
         print(e)
