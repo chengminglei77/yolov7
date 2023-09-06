@@ -13,10 +13,8 @@ import uuid
 from Report import HttpCode, Error, Result
 from detect_img_streams import recognize_head
 from models.experimental import attempt_load
-from utils.cut_images.cut_polygon_imgs import image_to_base64
 from utils.datasets import letterbox
 from utils.general import check_img_size, non_max_suppression, scale_coords
-from utils.plots import plot_one_box
 from utils.recongnized_color import identify_color
 from utils.torch_utils import select_device, TracedModel
 
@@ -313,11 +311,9 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
                     for *xyxy, conf, cls in reversed(det):
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
-                        if label_name == 'no_cap':
-                            return {'isHelmet': False}
                         if label_name == 'safety_cap' and conf_val >= parse_label_conf_value(labelName=label_name):
                             label = f'{names[int(cls)]} {conf:.2f}'
-                            plot_one_box(xyxy, img0s, label=label, color=colors[int(cls)], line_thickness=1)
+                            # plot_one_box(xyxy, img0s, label=label, color=colors[int(cls)], line_thickness=1)
                             header_imgs.append({
                                 "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
                                 'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
@@ -345,16 +341,16 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _a
     try:
         # Initialize
         img = cv2.imread(img_path)
+        # 是否截取图片
+        if is_cut:
+            img = identify_color.cut_rect_image(img_path)
+            cv2.imwrite(f'./output/person-{uuid.uuid4()}.jpg', img)
         # 是否对图片添加白框
         if is_padding:
             # img = cv2.copyMakeBorder(img, int(img.shape[0] * 0.2), int(img.shape[0] * 0.2), int(img.shape[1] * 0.2),
             #                          int(img.shape[1] * 0.2), cv2.BORDER_CONSTANT, value=[255, 255, 255])
             img = cv2.copyMakeBorder(img, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-        # 是否截取图片
-        if is_cut:
-            img = identify_color.cut_rect_image(img)
-            cv2.imwrite(f'./output/person-{uuid.uuid4()}.jpg', img)
-
+        cv2.imwrite(f'./output/person-{uuid.uuid4()}.jpg', img)
         im0 = img.copy()
 
         device, imgSize = parse_model_config(_video_model)
@@ -423,6 +419,7 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _a
     except Exception as e:
         print(e)
         del_images(img_path)
+        result['success'] = False
         return result
 
 
@@ -442,10 +439,9 @@ def petrochemical_predict():
         alarm_type = request.values.get('alarmType', "no_safetycap")
         image_type = request.values.get('imageType', -1)
         if image_type == -1 and alarm_type == 'person_off_duty_querying':
-            is_cut = True
+            is_cut = False
         else:
             is_cut = (int(image_type) == 1)
-
         results = []
         for file in files:
             if file is None:

@@ -3,6 +3,7 @@ import os
 import cv2
 
 from utils.recongnized_color import identify_color
+from utils.recongnized_color.identify_color import check_pic
 
 path = './datasets'
 
@@ -34,8 +35,7 @@ def check_color(path):
 def cut_image(path):
     images = os.listdir(path)
     for item in images:
-        bk_img = cv2.imread(f'{path}/{item}')
-        result = identify_color.cut_rect_image(bk_img)
+        result = identify_color.cut_rect_image(f'{path}/{item}')
         cv2.imwrite(f'./runs/{item}', result)
 
 

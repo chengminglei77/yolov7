@@ -1,10 +1,14 @@
-import cv2
-import numpy as np
-# from sklearn.cluster import KMeans
-from utils.recongnized_color import hsv_color_define
 import uuid
 
-filename = '../../datasets/1.jpg'
+import cv2
+import numpy as np
+from utils.recongnized_color import hsv_color_define
+
+from PIL import Image
+
+from utils.recongnized_color.adjusted_image import levelAdjust, aug
+
+filename = '../../datasets/38.png'
 
 change_txt = {
     "black": "black",
@@ -13,7 +17,7 @@ change_txt = {
     "gray1": "gray",
     "white": "white",
     "red": "red",
-    "red2": "red1",
+    "red2": "red",
     "orange": "orange",
     "yellow": "yellow",
     "green": "green",
@@ -62,26 +66,10 @@ def cut_img(frame):
     cv2.destroyAllWindows()
 
 
-# def get_mean_color(frame, num_colors):
-#     # 将图像转换为RGB格式
-#     image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-#     # 调整图像大小（可选）
-#     # image = cv2.resize(image, (800, 600))
-#     # 将图像转换为一维数组
-#     pixels = image.reshape(-1, 3)
-#     # 使用K均值聚类算法提取主要颜色
-#     kmeans = KMeans(n_clusters=num_colors)
-#     kmeans.fit(pixels)
-#
-#     # 获取聚类中心的RGB值
-#     colors = kmeans.cluster_centers_
-#
-#     return colors.astype(int)
-
-
 # 处理图片
 def get_color(frame):
     # cv2.imwrite('test.jpg', frame)
+    frame = aug(frame)
     x, y, c = frame.shape
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     maxsum = -100
@@ -144,7 +132,19 @@ def deal_color(frame, name):
     print(f"{name}:{result}")
 
 
-def cut_rect_image(image):
+def check_pic(path):
+    try:
+        Image.open(path).load()
+    except:
+        return True
+    else:
+        return False
+
+
+def cut_rect_image(filename):
+    image = cv2.imread(filename)
+    if not check_pic(filename):
+        return image
     # 将图片从BGR颜色空间转换为HSV颜色空间
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
     # 定义红色的HSV范围
@@ -180,22 +180,37 @@ def cut_rect_image(image):
     # 找到最大的闭环红色线框
     max_contour = None
     max_area = 0
+    y0 = 0
+    y1 = 0
+    x0 = 0
+    x1 = 0
     for contour in contours:
         area = cv2.contourArea(contour)
         if area > max_area:
             max_area = area
             max_contour = contour
+            y0, y1, x0, x1 = get_rect_points(contour, image)
 
     # 创建一个与原始图像大小相同的空白图像，将闭环的红色线框内的内容抠出来
     mask = np.zeros_like(image)
     try:
         cv2.drawContours(mask, [max_contour], 0, (255, 255, 255), -1)
         result = cv2.bitwise_and(image, mask)
+        result = result[y0:y1, x0:x1]
         return result
-    except Exception as e:
+    except:
         return image
 
 
+def get_rect_points(contour, frame):
+    weight = []
+    height = []
+    for item in contour:
+        height.append(item[-1][1])
+        weight.append(item[-1][0])
+    frame = frame[min(height):max(height), min(weight):max(weight)]
+    return min(height), max(height), min(weight), max(weight)
+
+
 if __name__ == '__main__':
-    frame = cv2.imread(filename)
-    print(get_color(frame))
+    cut_rect_image(filename)
