@@ -10,7 +10,7 @@ import os
 from os import listdir, getcwd
 from os.path import join
 
-classes = ["0", "1", "2", "3", "4", "5", "6", "u", 'd']  # 类别
+classes = ["hat", "person"]  # 类别
 
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -22,17 +22,17 @@ def convert(size, box):
     y = (box[2] + box[3]) / 2.0
     w = box[1] - box[0]
     h = box[3] - box[2]
-    x = x * dw
-    w = w * dw
-    y = y * dh
-    h = h * dh
+    x = round(x * dw, 6)
+    w = round(w * dw, 6)
+    y = round(y * dh, 6)
+    h = round(h * dh, 6)
     return (x, y, w, h)
 
 
 def convert_annotation(image_id):
-    in_file = open("D:\\project\\python\\datasets\\uniform01\\labels\\%s.xml" % (image_id), encoding='UTF-8')
+    in_file = open("D://data//datasets//VOC2028//Annotations\\%s.xml" % (image_id), encoding='UTF-8')
 
-    out_file = open("D:\\project\\python\\datasets\\uniform01\\txt\\%s.txt" % (image_id), 'w')  # 生成txt格式文件
+    out_file = open("D://data//datasets//VOC2028//txt//%s.txt" % (image_id), 'w')  # 生成txt格式文件
     tree = ET.parse(in_file)
     root = tree.getroot()
     size = root.find('size')
@@ -52,11 +52,10 @@ def convert_annotation(image_id):
         out_file.write(str(cls_id) + " " + " ".join([str(a) for a in bb]) + '\n')
 
 
-xml_path = os.path.join("D:\\project\\python\\datasets\\uniform01\\", 'labels\\')
+xml_path = "D://data//datasets//VOC2028//Annotations"
 
 # xml list
 img_xmls = os.listdir(xml_path)
 for img_xml in img_xmls:
     label_name = img_xml.split('.')[0]
-    print(label_name)
     convert_annotation(label_name)

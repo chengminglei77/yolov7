@@ -158,6 +158,7 @@ def recognize_head(img, imgSize=320, model=None, labelName='person_head', _devic
         if half:
             model.half()  # to FP16
         img0 = img
+        # img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
         img = letterbox(img0, imgsz, stride)[0]
         # convert
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
@@ -209,10 +210,13 @@ def recognize_head(img, imgSize=320, model=None, labelName='person_head', _devic
                             'conf': conf_val,
                             'image': img0[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
                         })
-        if len(header_imgs) >= 1:
-            sorted(header_imgs, key=lambda k: (k.get('conf', 0)))
-            return True, header_imgs[0]['image']
 
-        return False, img0
+        if len(header_imgs) >= 1:
+            # 排序
+            sorted(header_imgs, key=lambda k: (k.get('conf', 0)))
+            images = [item['image'] for item in header_imgs]
+            return True, images
+
+        return False, [img0]
     except Exception as e:
         print(e)

@@ -54,11 +54,14 @@ change_txt = {
     "behavior_look_phone": "behaviorLookPhone",
     "safety_cap": "cap",
     "upper_body": "upperBody",
-    "lower_body": "lowerBody"
+    "lower_body": "lowerBody",
+    "e_pillar": "ePillar",
+    "e_lights": "eLights",
+    "e_gas_tank": "eGasTank"
 }
 # 模型和标签配置
 _config = {}
-
+_debug_img_path = './output/debug/'
 # 设置线程池
 pool = ThreadPoolExecutor(max_workers=2)
 
@@ -156,14 +159,14 @@ def pre_parse_img(model, img, stride, imgsz, device, half):
     return pred, img
 
 
-def detect_cloth_type(img, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+def detect_cloth_type(img, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, is_debug=False):
     global _models
     try:
         # Initialize
         device, imgSize = parse_model_config(_reflective_model)
         half = device.type != _device  # half precision only supported on CUDA
         # Load model
-        model = _models[_uniform_model]
+        model = _models[_reflective_model]
 
         stride = int(model.stride.max())  # model stride
         imgsz = check_img_size(imgSize, s=stride)  # check img_size
@@ -174,6 +177,9 @@ def detect_cloth_type(img, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
         img0s = img.copy()
         # 图片添加白框
         img0s = cv2.copyMakeBorder(img0s, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+
+        if is_debug:
+            cv2.imwrite(f"{_debug_img_path}uniform-{uuid.uuid4()}.jpg", img0s)
         # Get names and colors
         names = model.module.names if hasattr(model, 'module') else model.names
         colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
@@ -195,7 +201,8 @@ def detect_cloth_type(img, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
 
 
 # 识别模型uniform
-def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45,
+                   _agnostic_nms=False, is_debug=False):
     global _models
     try:
         # Initialize
@@ -221,6 +228,8 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
 
             # 给图片填充白框
             img0s = cv2.copyMakeBorder(img0s, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            if is_debug:
+                cv2.imwrite(f"{_debug_img_path}uniform-{uuid.uuid4()}.jpg", img0s)
 
             # Get names and colors
             names = model.module.names if hasattr(model, 'module') else model.names
@@ -264,7 +273,7 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=Fals
 
 
 # 识别模型cap
-def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
+def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, is_debug=False):
     global _models
     try:
         # Initialize
@@ -280,20 +289,24 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
             model.half()  # to FP16
         t1 = time.time()
         header_imgs = []
+        heads_temp = []
         for item in images:
             # 解析图片
             xyxy = item['points']
             img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
-
             # 获取人头图片
-            flag, img0s = recognize_head(img0, labelName="person_head",
-                                         _conf_thres=parse_label_conf_value(labelName='person_head'),
-                                         model=_models[_video_model])
-            # 给图片填充白框
-            img0s = cv2.copyMakeBorder(img0s, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-            # cv2.imwrite("s.jpg", img0s)
+            flag, imgs = recognize_head(img0, labelName="person_head",
+                                        _conf_thres=parse_label_conf_value(labelName='person_head'),
+                                        model=_models[_video_model])
             if not flag:
-                continue
+                return {'isHelmet': False}
+            heads_temp.extend(imgs)
+
+        for item in heads_temp:
+            # 给图片填充白框
+            img0s = cv2.copyMakeBorder(item, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            if is_debug:
+                cv2.imwrite(f"{_debug_img_path}cap-{uuid.uuid4()}.jpg", img0s)
             # Get names and colors
             names = model.module.names if hasattr(model, 'module') else model.names
             colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
@@ -318,9 +331,8 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
                                 "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
                                 'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
                             })
-                else:
-                    return {'isHelmet': False}
-        if len(header_imgs) < 1:
+
+        if len(header_imgs) < 1 or len(header_imgs) != len(heads_temp):
             return {'isHelmet': False}
         # 对所有头盔的图片进行排序，取最大的一个返回颜色
         sorted(header_imgs, key=lambda k: (k.get('value', 0)))
@@ -336,7 +348,8 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
 
 
 # 识别模型video
-def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _agnostic_nms=False, is_cut=False):
+def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
+               _agnostic_nms=False, is_cut=False, is_debug=False):
     global _models
     try:
         # Initialize
@@ -344,13 +357,12 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _a
         # 是否截取图片
         if is_cut:
             img = identify_color.cut_rect_image(img_path)
-            cv2.imwrite(f'./output/person-{uuid.uuid4()}.jpg', img)
         # 是否对图片添加白框
         if is_padding:
-            # img = cv2.copyMakeBorder(img, int(img.shape[0] * 0.2), int(img.shape[0] * 0.2), int(img.shape[1] * 0.2),
-            #                          int(img.shape[1] * 0.2), cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            # top buttom left right
             img = cv2.copyMakeBorder(img, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-        cv2.imwrite(f'./output/person-{uuid.uuid4()}.jpg', img)
+        if is_debug:
+            cv2.imwrite(f'{_debug_img_path}video-{uuid.uuid4()}.jpg', img)
         im0 = img.copy()
 
         device, imgSize = parse_model_config(_video_model)
@@ -403,8 +415,12 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45, _a
                             "value": conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
                         })
                 if len(persons) >= 1:
-                    future1 = pool.submit(detect_cap, persons)
-                    future2 = pool.submit(detect_uniform, persons)
+                    params = {
+                        "images": persons,
+                        "is_debug": is_debug
+                    }
+                    future1 = pool.submit(lambda x: detect_cap(**x), params)
+                    future2 = pool.submit(lambda x: detect_uniform(**x), params)
                     # 获取安全帽信息
                     result['cap'] = future1.result()
                     # 获取工服信息
@@ -435,9 +451,10 @@ def petrochemical_predict():
     if request.method == 'POST':
         # 获取上传的文件,若果没有文件默认为None
         files = request.files.getlist('images', None)
-        is_padding = request.values.get('isPadding', False)
+        # is_padding = request.values.get('isPadding', False)
         alarm_type = request.values.get('alarmType', "no_safetycap")
         image_type = request.values.get('imageType', -1)
+        is_debug = request.values.get('isDebug', False)
         if image_type == -1 and alarm_type == 'person_off_duty_querying':
             is_cut = False
         else:
@@ -448,7 +465,7 @@ def petrochemical_predict():
                 return Error(HttpCode.servererror, 'no files for upload')
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
-            result = detect_img(img_name, is_padding=is_padding, is_cut=is_cut)
+            result = detect_img(img_name, is_padding=False, is_cut=is_cut, is_debug=is_debug)
             results.append(result)
         end_time = time.time()
         return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)

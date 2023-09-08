@@ -136,14 +136,16 @@ def check_pic(path):
     try:
         Image.open(path).load()
     except:
+        print("error")
         return True
     else:
+        print("success")
         return False
 
 
 def cut_rect_image(filename):
     image = cv2.imread(filename)
-    if not check_pic(filename):
+    if check_pic(filename):
         return image
     # 将图片从BGR颜色空间转换为HSV颜色空间
     hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
