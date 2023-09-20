@@ -14,7 +14,7 @@ change_txt = {
     "black": "black",
     "black1": "black",
     "gray": "gray",
-    "gray1": "gray",
+    "gray1": "gray1",
     "white": "white",
     "red": "red",
     "red2": "red",
@@ -102,6 +102,7 @@ def get_color(frame):
 
 # 处理图片
 def deal_color(frame, name):
+    frame = aug(frame)
     x, y, c = frame.shape
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     maxsum = -100

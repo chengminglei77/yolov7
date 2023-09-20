@@ -250,6 +250,9 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45,
                         label_name = names[int(cls)]  # 类别
                         conf_val = float(conf)  # 置信度
                         if conf_val >= parse_label_conf_value(labelName=label_name):
+                            if is_debug:
+                                cv2.imwrite(f'uniform-{label_name}-{uuid.uuid4()}.jpg',
+                                            img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
                             uniform_image[label_name].append({
                                 "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
                                 'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
@@ -349,7 +352,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
 
 # 识别模型video
 def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
-               _agnostic_nms=False, is_cut=False, is_debug=False):
+               _agnostic_nms=False, is_cut=False, is_debug=False, is_hidden=False, points=[]):
     global _models
     try:
         # Initialize
@@ -361,6 +364,10 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
         if is_padding:
             # top buttom left right
             img = cv2.copyMakeBorder(img, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+        if len(points) == 4 and is_hidden:
+            mask = np.zeros_like(img)
+            mask[points[1]:points[3], points[0]:points[2]] = img[points[1]:points[3], points[0]:points[2]]
+            img = mask
         if is_debug:
             cv2.imwrite(f'{_debug_img_path}video-{uuid.uuid4()}.jpg', img)
         im0 = img.copy()
@@ -453,19 +460,27 @@ def petrochemical_predict():
         files = request.files.getlist('images', None)
         # is_padding = request.values.get('isPadding', False)
         alarm_type = request.values.get('alarmType', "no_safetycap")
+        points = request.values.get('targetPoints', '[]')
+        points = eval(points)
         image_type = request.values.get('imageType', -1)
         is_debug = request.values.get('isDebug', False)
-        if image_type == -1 and alarm_type == 'person_off_duty_querying':
-            is_cut = False
-        else:
-            is_cut = (int(image_type) == 1)
+        is_hidden = False
+        if alarm_type == 'person_off_duty_querying':
+            is_hidden = True
+
+        # if image_type == -1 and alarm_type == 'person_off_duty_querying':
+        #     is_cut = False
+        # else:
+        #     is_cut = (int(image_type) == 1)
+
         results = []
         for file in files:
             if file is None:
                 return Error(HttpCode.servererror, 'no files for upload')
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
-            result = detect_img(img_name, is_padding=False, is_cut=is_cut, is_debug=is_debug)
+            result = detect_img(img_name, is_padding=False, is_cut=False, is_debug=is_debug, is_hidden=is_hidden,
+                                points=points)
             results.append(result)
         end_time = time.time()
         return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)

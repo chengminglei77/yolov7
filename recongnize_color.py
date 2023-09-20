@@ -40,4 +40,4 @@ def cut_image(path):
 
 
 if __name__ == '__main__':
-    cut_image(path)
+    check_color(path)

@@ -46,9 +46,9 @@ def clear_labels_without_images(old_img_path: str, old_label_path: str):
     if not os.path.exists(old_img_path) or not os.path.exists(old_label_path):
         raise ValueError("图片或者标注路径不存在,请确认后重试")
     # 获取标注的图片名称
-    images = get_paths(old_img_path, old_suffix='jpg', new_suffix='xml')
-    images.extend(get_paths(old_img_path, old_suffix='JPG', new_suffix='xml'))
-    images.extend(get_paths(old_img_path, old_suffix='png', new_suffix='xml'))
+    images = get_paths(old_img_path, old_suffix='jpg', new_suffix='txt')
+    images.extend(get_paths(old_img_path, old_suffix='JPG', new_suffix='txt'))
+    images.extend(get_paths(old_img_path, old_suffix='png', new_suffix='txt'))
     labels = get_paths(old_label_path)
     for item in labels:
         if item not in images:
@@ -73,5 +73,6 @@ def test_clear_labels_without_images(old_img_path="D://project//python//datasets
 
 
 if __name__ == '__main__':
-    clear_labels_without_images(old_img_path="D://data//datasets//VOC2028//JPEGImages",
-                                old_label_path="D://data//datasets//VOC2028//Annotations")
+    move_images_without_labels(old_img_path="D://data//datasets//train//images",
+                                old_label_path="D://data//datasets//train//labels",
+                               new_path="D://data//datasets//train//test")
