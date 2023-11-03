@@ -13,7 +13,7 @@ import uuid
 from Report import HttpCode, Error, Result
 from detect_img_streams import recognize_head
 from models.experimental import attempt_load
-from utils.datasets import letterbox
+from utils.datasets import letterbox, LoadImages
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.recongnized_color import identify_color
 from utils.torch_utils import select_device, TracedModel
@@ -57,7 +57,10 @@ change_txt = {
     "lower_body": "lowerBody",
     "e_pillar": "ePillar",
     "e_lights": "eLights",
-    "e_gas_tank": "eGasTank"
+    "e_gas_tank": "eGasTank",
+    "e_watering_can": "eWateringCan",
+    "e_light_shadow": "eLightShadow",
+    "e_cloth": "eCloth",
 }
 # 模型和标签配置
 _config = {}
@@ -132,7 +135,7 @@ def init_model():
 
 # 预处理图片
 def pre_parse_img(model, img, stride, imgsz, device, half):
-    img = letterbox(img, imgsz, stride)[0]
+    img = letterbox(img, imgsz, stride=stride)[0]
     # convert
     img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
     img = np.ascontiguousarray(img)
@@ -297,6 +300,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
             # 解析图片
             xyxy = item['points']
             img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
+            img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
             # 获取人头图片
             flag, imgs = recognize_head(img0, labelName="person_head",
                                         _conf_thres=parse_label_conf_value(labelName='person_head'),
@@ -308,6 +312,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
         for item in heads_temp:
             # 给图片填充白框
             img0s = cv2.copyMakeBorder(item, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            # img0s = item
             if is_debug:
                 cv2.imwrite(f"{_debug_img_path}cap-{uuid.uuid4()}.jpg", img0s)
             # Get names and colors
@@ -519,4 +524,4 @@ def update_model_config():
 
 if __name__ == '__main__':
     init_model()
-    app.run(host='0.0.0.0', port=9797)
+    app.run(host='0.0.0.0', port=9999)

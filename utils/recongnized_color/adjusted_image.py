@@ -38,10 +38,29 @@ def aug(src):
 
     # 将分位值区间拉伸到0到255，这里取了255*0.1与255*0.9是因为可能会出现像素值溢出的情况，所以最好不要设置为0到255。
     out = np.zeros(src.shape, src.dtype)
-    cv2.normalize(src, out, 255 * 0.06, 255 * 1, cv2.NORM_MINMAX)
+    cv2.normalize(src, out, 5, 250, cv2.NORM_MINMAX)
     # cv2.imwrite('../resources/images/out.png', out)
     return out
 
+
+def adaptive_contrast_enhancement(image):
+    # 将图像从BGR色彩空间转换为LAB色彩空间
+    lab_image = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
+
+    # 分离L、A、B通道
+    l_channel, a_channel, b_channel = cv2.split(lab_image)
+
+    # 对L通道进行自适应直方图均衡化
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(5, 5))
+    l_channel_eq = clahe.apply(l_channel)
+
+    # 合并L、A、B通道
+    lab_image_eq = cv2.merge([l_channel_eq, a_channel, b_channel])
+
+    # 将图像从LAB色彩空间转换回BGR色彩空间
+    enhanced_image = cv2.cvtColor(lab_image_eq, cv2.COLOR_LAB2BGR)
+
+    return enhanced_image
 
 # 扩展图片增强
 def expand_aug(src):

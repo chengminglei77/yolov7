@@ -6,16 +6,19 @@ from utils.recongnized_color import hsv_color_define
 
 from PIL import Image
 
-from utils.recongnized_color.adjusted_image import levelAdjust, aug
+from utils.recongnized_color.adjusted_image import aug, adaptive_contrast_enhancement
 
 filename = '../../datasets/38.png'
 
 change_txt = {
     "black": "black",
     "black1": "black",
+    "black2": "black",
+    "black3": "black",
     "gray": "gray",
     "gray1": "gray1",
     "white": "white",
+    "white1": "white1",
     "red": "red",
     "red2": "red",
     "orange": "orange",
@@ -102,7 +105,8 @@ def get_color(frame):
 
 # 处理图片
 def deal_color(frame, name):
-    frame = aug(frame)
+    frame = adaptive_contrast_enhancement(frame)
+    # cv2.imwrite('test.jpg', frame)
     x, y, c = frame.shape
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
     maxsum = -100

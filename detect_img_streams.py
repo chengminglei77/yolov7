@@ -142,7 +142,7 @@ def detect_img_stream(imgs, imgSize=640, model_name='safety_cap', labelName=[], 
 
 
 # 视频识别—获取person_head位置
-def recognize_head(img, imgSize=320, model=None, labelName='person_head', _device='cpu',
+def recognize_head(img, imgSize=640, model=None, labelName='person_head', _device='cpu',
                    _trace=True, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False):
     try:
         # Initialize
