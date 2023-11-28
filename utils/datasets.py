@@ -177,7 +177,6 @@ class LoadImages:  # for inference
                     path = self.files[self.count]
                     self.new_video(path)
                     ret_val, img0 = self.cap.read()
-
             self.frame += 1
             print(f'video {self.count + 1}/{self.nf} ({self.frame}/{self.nframes}) {path}: ', end='')
 
@@ -195,7 +194,7 @@ class LoadImages:  # for inference
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        return path, img, img0, self.cap
+        return path, img, img0, self.cap, True
 
     def new_video(self, path):
         self.frame = 0
@@ -280,6 +279,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
 
         n = len(sources)
         self.imgs = [None] * n
+        self.success = [False] * n
         # self.sources = [clean_str(x) for x in sources]  # clean source names for later
         self.sources = sources
         for i, s in enumerate(sources):
@@ -299,6 +299,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
                 self.fps = cap.get(cv2.CAP_PROP_FPS) % 100
 
                 _, self.imgs[i] = cap.read()  # guarantee first frame
+                self.success[i] = True
                 thread = Thread(target=self.update, args=([i, cap]), daemon=True)
                 print(f' success ({w}x{h} at {self.fps:.2f} FPS).')
                 thread.start()
@@ -321,6 +322,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
             cap.grab()
             if n == 6:  # read every 4th frame
                 success, im = cap.retrieve()
+                self.success[index] = success
                 self.imgs[index] = im if success else self.imgs[index] * 0
                 n = 0
             # time.sleep(1 / self.fps)  # wait time
@@ -347,7 +349,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
         img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
         img = np.ascontiguousarray(img)
 
-        return self.sources, img, img0, None
+        return self.sources, img, img0, None, self.success
 
     def __len__(self):
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years
@@ -447,7 +449,7 @@ class LoadStreamsWithWork:  # multiple IP or RTSP cameras
         img = img[:, :, :, ::-1].transpose(0, 3, 1, 2)  # BGR to RGB, to bsx3x416x416
         img = np.ascontiguousarray(img)
 
-        return source_temp, img, img0_temp, None,alarmConfig
+        return source_temp, img, img0_temp, None, alarmConfig
 
     def __len__(self):
         return 0  # 1E12 frames = 32 streams at 30 FPS for 30 years

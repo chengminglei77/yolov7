@@ -1,4 +1,5 @@
 import json
+import re
 from concurrent.futures import ThreadPoolExecutor
 
 import os
@@ -53,15 +54,24 @@ change_txt = {
     "behavior_call": "behaviorCall",
     "behavior_look_phone": "behaviorLookPhone",
     "safety_cap": "cap",
-    "upper_body": "upperBody",
-    "lower_body": "lowerBody",
+    "clothes_gf_upper": "upperBody",
+    "clothes_gf_lower": "lowerBody",
+    "clothes_fgy_upper": "clothesfgyupper",
+    "clothes_lower": "clothesLower",
+    "clothes_upper": "clothesUpper",
     "e_pillar": "ePillar",
     "e_lights": "eLights",
     "e_gas_tank": "eGasTank",
     "e_watering_can": "eWateringCan",
     "e_light_shadow": "eLightShadow",
     "e_cloth": "eCloth",
+    "e_cloud": "eCloud",
+
 }
+# 模型一检测目标
+_labels_config = [
+    'person', 'person_head', 'alarm_fumes', 'alarm_fire', 'behavior_smoking', 'behavior_call', 'behavior_look_phone'
+]
 # 模型和标签配置
 _config = {}
 _debug_img_path = './output/debug/'
@@ -107,7 +117,7 @@ def parse_label_conf_value(labelName='person'):
 
 
 # 根据模型获取基础置信度
-def parase_model_conf_value(modelName='video'):
+def parse_model_conf_value(modelName='video'):
     global _config
     modelConfig = _config['modelConfig']
 
@@ -144,18 +154,7 @@ def pre_parse_img(model, img, stride, imgsz, device, half):
     img /= 255.0  # 0 - 255 to 0.0 - 1.0
     if img.ndimension() == 3:
         img = img.unsqueeze(0)
-    if device.type != _device:
-        model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
-    old_img_w = old_img_h = imgsz
-    old_img_b = 1
 
-    if device.type != _device and (
-            old_img_b != img.shape[0] or old_img_h != img.shape[2] or old_img_w != img.shape[3]):
-        old_img_b = img.shape[0]
-        old_img_h = img.shape[2]
-        old_img_w = img.shape[3]
-        for i in range(3):
-            model(img, augment=False)[0]
     with torch.no_grad():  # Calculating gradients would cause a GPU memory leak
         pred = model(img, augment=False)[0]
 
@@ -221,9 +220,13 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45,
             model.half()  # to FP16
         t1 = time.time()
         uniform_image = {
-            'upper_body': [],
-            'lower_body': []
+            'clothes_upper': [],
+            'clothes_lower': [],
+            'clothes_gf_upper': [],
+            'clothes_gf_lower': [],
+            'clothes_fgy_upper': []
         }
+
         for item in images:
             # 解析图片
             xyxy = item['points']
@@ -236,7 +239,6 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45,
 
             # Get names and colors
             names = model.module.names if hasattr(model, 'module') else model.names
-            colors = [[random.randint(0, 255) for _ in range(3)] for _ in names]
 
             pred, img = pre_parse_img(model=model, img=img0s.copy(), stride=stride, imgsz=imgsz, device=device,
                                       half=half)
@@ -254,24 +256,50 @@ def detect_uniform(images, _conf_thres=0.25, _iou_thres=0.45,
                         conf_val = float(conf)  # 置信度
                         if conf_val >= parse_label_conf_value(labelName=label_name):
                             if is_debug:
-                                cv2.imwrite(f'uniform-{label_name}-{uuid.uuid4()}.jpg',
+                                cv2.imwrite(f'{_debug_img_path}uniform-{label_name}-{uuid.uuid4()}.jpg',
                                             img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])])
                             uniform_image[label_name].append({
                                 "image": img0s[int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])],
                                 'value': conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
                             })
         result = {}
-        for item in uniform_image:
-            if len(uniform_image[item]) > 0:
-                sorted(uniform_image[item], key=lambda k: (k.get('value', 0)))
-                result[change_txt[item]] = {
-                    'type': 'other',
-                }
-                txt = identify_color.get_color(uniform_image[item][-1]['image'])
-                result[change_txt[item]].update(txt)
-                if item == 'upper_body':
-                    type = detect_cloth_type(uniform_image[item][-1]['image'])
-                    result[change_txt[item]]['type'] = type
+        if len(uniform_image['clothes_fgy_upper']) > 0:
+            result['upperBody'] = {
+                'type': 'reflective',
+                'mainColor': 'blue'
+            }
+        elif len(uniform_image['clothes_gf_upper']) > 0:
+            result['upperBody'] = {
+                'type': 'uniform',
+                'mainColor': 'blue'
+            }
+        if len(uniform_image['clothes_gf_lower']) > 0:
+            result['lowerBody'] = {
+                'type': 'uniform',
+                'mainColor': 'blue'
+            }
+        # for item in ['clothes_gf_upper', 'clothes_gf_lower']:
+        #     if len(uniform_image[item]) > 0:
+        #         sorted(uniform_image[item], key=lambda k: (k.get('value', 0)))
+        #         result[change_txt[item]] = {
+        #             'type': 'gongfu',
+        #         }
+        #         txt = {
+        #             'mainColor': 'blue',
+        #             'colorRatio': []
+        #         }
+        #         result[change_txt[item]].update(txt)
+        #         if item == 'clothes_gf_upper':
+        #             type = detect_cloth_type(uniform_image[item][-1]['image'])
+        #             result[change_txt[item]]['type'] = type
+        #     label = item.replace('_gf', '')
+        #     if len(uniform_image[item]) == 0 and len(uniform_image[label]) > 0:
+        #         sorted(uniform_image[item], key=lambda k: (k.get('value', 0)))
+        #         result[change_txt[item]] = {
+        #             'type': 'other',
+        #         }
+        #         txt = identify_color.get_color(uniform_image[item][-1]['image'])
+        #         result[change_txt[item]].update(txt)
         return result
     except Exception as e:
         print(e)
@@ -321,7 +349,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
             pred, img = pre_parse_img(model=model, img=img0s.copy(), stride=stride, imgsz=imgsz, device=device,
                                       half=half)
             # Apply NMS
-            pred = non_max_suppression(pred, parase_model_conf_value(_cap_model), _iou_thres, classes=None,
+            pred = non_max_suppression(pred, parse_model_conf_value(_cap_model), _iou_thres, classes=None,
                                        agnostic=_agnostic_nms)
             # Process detections
             for i, det in enumerate(pred):  # detections per image
@@ -359,6 +387,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
 def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
                _agnostic_nms=False, is_cut=False, is_debug=False, is_hidden=False, points=[]):
     global _models
+    global _labels_config
     try:
         # Initialize
         img = cv2.imread(img_path)
@@ -412,6 +441,8 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
                 for *xyxy, conf, cls in reversed(det):
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
+                    if label_name not in _labels_config:
+                        continue
                     if conf_val < parse_label_conf_value(labelName=label_name):
                         continue
                     result[change_txt[label_name]] = result.get(change_txt[label_name], 0) + 1
@@ -466,17 +497,20 @@ def petrochemical_predict():
         # is_padding = request.values.get('isPadding', False)
         alarm_type = request.values.get('alarmType', "no_safetycap")
         points = request.values.get('targetPoints', '[]')
-        points = eval(points)
+
         image_type = request.values.get('imageType', -1)
         is_debug = request.values.get('isDebug', False)
         is_hidden = False
         if alarm_type == 'person_off_duty_querying':
             is_hidden = True
-
+            points = eval(points)
         # if image_type == -1 and alarm_type == 'person_off_duty_querying':
         #     is_cut = False
         # else:
         #     is_cut = (int(image_type) == 1)
+        is_padding = False
+        if alarm_type in ['no_safetycap', 'no_uniform']:
+            is_padding = True
 
         results = []
         for file in files:
@@ -484,7 +518,7 @@ def petrochemical_predict():
                 return Error(HttpCode.servererror, 'no files for upload')
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
-            result = detect_img(img_name, is_padding=False, is_cut=False, is_debug=is_debug, is_hidden=is_hidden,
+            result = detect_img(img_name, is_padding=is_padding, is_cut=False, is_debug=is_debug, is_hidden=is_hidden,
                                 points=points)
             results.append(result)
         end_time = time.time()
@@ -524,4 +558,4 @@ def update_model_config():
 
 if __name__ == '__main__':
     init_model()
-    app.run(host='0.0.0.0', port=9999)
+    app.run(host='0.0.0.0', port=9797)
