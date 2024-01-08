@@ -1,7 +1,8 @@
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
-
+import logging
+from logging.handlers import RotatingFileHandler
 import os
 from flask import Flask, request
 import cv2
@@ -77,6 +78,21 @@ _config = {}
 _debug_img_path = './output/debug/'
 # 设置线程池
 pool = ThreadPoolExecutor(max_workers=2)
+
+# 配置日志记录
+handler = RotatingFileHandler('app.log', maxBytes=10000, backupCount=1)
+handler.setLevel(logging.INFO)
+
+formatter = logging.Formatter('%(asctime)s %(levelname)s: %(message)s')
+handler.setFormatter(formatter)
+
+app.logger.addHandler(handler)
+
+if not app.debug:
+    # 如果不处于调试模式，将日志输出到 stdout
+    stream_handler = logging.StreamHandler()
+    stream_handler.setLevel(logging.INFO)
+    app.logger.addHandler(stream_handler)
 
 
 # 加载配置文件
@@ -328,7 +344,8 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
             # 解析图片
             xyxy = item['points']
             img0 = item['image'][int(xyxy[1]):int(xyxy[3]), int(xyxy[0]):int(xyxy[2])]
-            img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            # img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
+            cv2.imwrite(f"{_debug_img_path}cap-{uuid.uuid4()}.jpg", img0)
             # 获取人头图片
             flag, imgs = recognize_head(img0, labelName="person_head",
                                         _conf_thres=parse_label_conf_value(labelName='person_head'),
@@ -513,6 +530,10 @@ def petrochemical_predict():
             is_padding = True
 
         results = []
+        if len(files) > 1:
+            app.logger.info(
+                f"image count: {len(files)},alarm_type: {alarm_type},points: {points},imageType:{image_type}")
+
         for file in files:
             if file is None:
                 return Error(HttpCode.servererror, 'no files for upload')

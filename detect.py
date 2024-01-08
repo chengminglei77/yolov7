@@ -68,6 +68,8 @@ def detect(save_img=False):
 
     t0 = time.time()
     for path, img, im0s, vid_cap, successes in dataset:
+        cv2.imshow('frame', im0s)
+        cv2.waitKey(1)  # 1 millisecond
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
         img /= 255.0  # 0 - 255 to 0.0 - 1.0
@@ -161,7 +163,7 @@ def detect(save_img=False):
                             save_path += '.mp4'
                         vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*'mp4v'), fps, (w, h))
                     vid_writer.write(im0)
-
+    print(time.time() - t0)
     if save_txt or save_img:
         s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
         # print(f"Results saved to {save_dir}{s}")
@@ -171,10 +173,10 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='weights/best.pt', help='model.pt path(s)')
-    parser.add_argument('--source', type=str, default='./datasets/uniform',
+    parser.add_argument('--weights', nargs='+', type=str, default='weights/cap.pt', help='model.pt path(s)')
+    parser.add_argument('--source', type=str, default='./datasets/t.mp4',
                         help='source')  # file/folder, 0 for webcam
-    parser.add_argument('--img-size', type=int, default=480, help='inference size (pixels)')
+    parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
     parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')

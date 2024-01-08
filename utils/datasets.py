@@ -141,7 +141,7 @@ class LoadImages:  # for inference
         images = [x for x in files if x.split('.')[-1].lower() in img_formats]
         videos = [x for x in files if x.split('.')[-1].lower() in vid_formats]
         ni, nv = len(images), len(videos)
-
+        self.startTime = time.time()
         self.img_size = img_size
         self.stride = stride
         self.files = images + videos
@@ -184,6 +184,8 @@ class LoadImages:  # for inference
             # Read image
             self.count += 1
             img0 = cv2.imread(path)  # BGR
+            # 添加30像素的白边
+            # img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
             assert img0 is not None, 'Image Not Found ' + path
             # print(f'image {self.count}/{self.nf} {path}: ', end='')
 
