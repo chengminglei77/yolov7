@@ -184,6 +184,11 @@ class LoadImages:  # for inference
             # Read image
             self.count += 1
             img0 = cv2.imread(path)  # BGR
+            # points = [854, 186, 1881, 1050]
+            # mask = np.ones_like(img0)
+            # mask *= 255
+            # mask[points[1]:points[3], points[0]:points[2]] = img0[points[1]:points[3], points[0]:points[2]]
+            # img0 = mask
             # 添加30像素的白边
             # img0 = cv2.copyMakeBorder(img0, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
             assert img0 is not None, 'Image Not Found ' + path
@@ -196,7 +201,7 @@ class LoadImages:  # for inference
         img = img[:, :, ::-1].transpose(2, 0, 1)  # BGR to RGB, to 3x416x416
         img = np.ascontiguousarray(img)
 
-        return path, img, img0, self.cap, True
+        return path, img, img0, self.cap
 
     def new_video(self, path):
         self.frame = 0
@@ -327,6 +332,8 @@ class LoadStreams:  # multiple IP or RTSP cameras
                 self.success[index] = success
                 self.imgs[index] = im if success else self.imgs[index] * 0
                 n = 0
+            else:
+                self.success[index] = False
             # time.sleep(1 / self.fps)  # wait time
 
     def __iter__(self):
@@ -1292,7 +1299,7 @@ def pastein(image, labels, sample_labels, sample_images, sample_masks):
 
         box = np.array([xmin, ymin, xmax, ymax], dtype=np.float32)
         if len(labels):
-            ioa = bbox_ioa(box, labels[:, 1:5])  # intersection over area     
+            ioa = bbox_ioa(box, labels[:, 1:5])  # intersection over area
         else:
             ioa = np.zeros(1)
 

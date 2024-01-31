@@ -1,3 +1,5 @@
+# coding:utf-8
+
 from pathlib import Path
 import cv2
 import torch
@@ -10,10 +12,14 @@ from utils.general import check_img_size, check_imshow, non_max_suppression, app
     scale_coords, strip_optimizer, set_logging, \
     increment_path
 from utils.torch_utils import select_device, load_classifier, time_synchronized, TracedModel
-
+from utils.line_utils import *
 from utils.sort import *
 
 os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+line_start = (620, 890)
+line_end = (500, 460)
+inNum = 0
+outNum = 0
 
 
 # Function to Draw Bounding boxes
@@ -43,6 +49,8 @@ def draw_boxes(img, bbox, identities=None, categories=None, confidences=None, na
 
 
 def detect(save_img=False):
+    global inNum
+    global outNum
     source, weights, view_img, save_txt, imgsz, trace = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size, not opt.no_trace
     save_img = not opt.nosave and not source.endswith('.txt')  # save inference images
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
@@ -96,6 +104,7 @@ def detect(save_img=False):
     ###################################
     startTime = 0
     ###################################
+
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -159,6 +168,7 @@ def detect(save_img=False):
 
                     # draw boxes for visualization
                     if len(tracked_dets) > 0:
+
                         bbox_xyxy = tracked_dets[:, :4]
                         identities = tracked_dets[:, 8]
                         categories = tracked_dets[:, 4]
@@ -167,6 +177,7 @@ def detect(save_img=False):
                         # if opt.show_track:
                         if True:
                             # loop over tracks
+                            cv2.line(im0, (500, 460), (620, 890), (0, 255, 0), 3)
                             for t, track in enumerate(tracks):
                                 track_color = colors[int(track.detclass)] if not opt.unique_track_color else \
                                     sort_tracker.color_list[t]
@@ -177,12 +188,34 @@ def detect(save_img=False):
                                            int(track.centroidarr[i + 1][1])),
                                           track_color, thickness=opt.thickness)
                                  for i, _ in enumerate(track.centroidarr)
-                                 if i < len(track.centroidarr) - 1]
+                                 if i < len(track.centroidarr) - 1 and track.detclass == 0]
+                            # judge accross line
+                            for t, track in enumerate(tracks):
+                                if track.detclass == 0 and len(track.centroidarr) > 2:
+                                    # first judge interaction
+                                    p_start = track.centroidarr[0]
+                                    p_end = track.centroidarr[-1]
+                                    if intersection(line_start, line_end, p_start, p_end):
+                                        print('line intersection')
+                                        # judge direction
+                                        if judge_in(line_start, line_end, p_start) \
+                                                and not judge_in(line_start, line_end, p_end):
+                                            inNum = inNum + 1
+                                            track.centroidarr = []
+                                        elif not judge_in(line_start, line_end, p_start) \
+                                                and judge_in(line_start, line_end, p_end):
+                                            outNum = outNum + 1
+                                            track.centroidarr = []
+
+                            print(f'in count: {inNum},out count {outNum}')
                 else:
                     bbox_xyxy = dets_to_sort[:, :4]
                     identities = None
                     categories = dets_to_sort[:, 5]
                     confidences = dets_to_sort[:, 4]
+                # add line
+                cv2.putText(im0, f'in count: {inNum},out count {outNum}', (20, 70), cv2.FONT_HERSHEY_PLAIN,
+                            2, (0, 255, 0), 2)
                 im0 = draw_boxes(im0, bbox_xyxy, identities, categories, confidences, names, colors)
 
             # Print time (inference + NMS)
@@ -198,7 +231,7 @@ def detect(save_img=False):
                 cv2.putText(im0, "FPS: " + str(int(fps)), (20, 70), cv2.FONT_HERSHEY_PLAIN, 2, (0, 255, 0), 2)
 
             #######################################################
-            if view_img:
+            if True:
                 cv2.imshow(str(p), im0)
                 cv2.waitKey(1)  # 1 millisecond
 
@@ -231,8 +264,10 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='./weights/video.pt', help='model.pt path(s)')
-    parser.add_argument('--source', type=str, default='street.mp4', help='source')  # file/folder, 0 for webcam
+    parser.add_argument('--weights', nargs='+', type=str, default='./weights/best.pt',
+                        help='model.pt path(s)')
+    parser.add_argument('--source', type=str, default='./datasets/output.mp4',
+                        help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')

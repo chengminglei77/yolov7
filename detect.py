@@ -67,7 +67,7 @@ def detect(save_img=False):
     old_img_b = 1
 
     t0 = time.time()
-    for path, img, im0s, vid_cap, successes in dataset:
+    for path, img, im0s, vid_cap in dataset:
         cv2.imshow('frame', im0s)
         cv2.waitKey(1)  # 1 millisecond
         img = torch.from_numpy(img).to(device)
@@ -102,7 +102,7 @@ def detect(save_img=False):
         # Process detections
         for i, det in enumerate(pred):  # detections per image
             if webcam:  # batch_size >= 1
-                p, s, im0, frame, isSuc = path[i], '%g: ' % i, im0s[i].copy(), dataset.count, successes[i]
+                p, s, im0, frame, isSuc = path[i], '%g: ' % i, im0s[i].copy(), dataset.count,True
             else:
                 p, s, im0, frame, isSuc = path, '', im0s, getattr(dataset, 'frame', 0), True
 
@@ -173,8 +173,8 @@ def detect(save_img=False):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='weights/cap.pt', help='model.pt path(s)')
-    parser.add_argument('--source', type=str, default='./datasets/t.mp4',
+    parser.add_argument('--weights', nargs='+', type=str, default='weights/video.pt', help='model.pt path(s)')
+    parser.add_argument('--source', type=str, default='./datasets/cap',
                         help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')

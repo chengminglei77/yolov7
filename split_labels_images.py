@@ -18,8 +18,8 @@ def move_images_without_labels(old_img_path: str, old_label_path: str, new_path:
         os.mkdir(new_path)
     # 获取标注的图片名称
     image_with_labels = get_paths(old_label_path, old_suffix='txt', new_suffix='jpg')
-    image_with_labels.extend(get_paths(old_label_path, old_suffix='txt', new_suffix='png'))
-    image_with_labels.extend(get_paths(old_label_path, old_suffix='txt', new_suffix='JPG'))
+    # image_with_labels.extend(get_paths(old_label_path, old_suffix='txt', new_suffix='png'))
+    # image_with_labels.extend(get_paths(old_label_path, old_suffix='txt', new_suffix='JPG'))
     # 额外配置的label文件
     labels = []
     # 获取目录下的所有文件
@@ -73,6 +73,6 @@ def test_clear_labels_without_images(old_img_path="D://project//python//datasets
 
 
 if __name__ == '__main__':
-    move_images_without_labels(old_img_path="D://data//datasets//train//images",
-                                old_label_path="D://data//datasets//train//labels",
-                               new_path="D://data//datasets//train//test")
+    clear_labels_without_images(old_img_path="D://data//少荃体育//person20240116//images",
+                                old_label_path="D://data//少荃体育//person20240116//labels",
+                              )

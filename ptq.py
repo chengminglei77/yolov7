@@ -147,23 +147,6 @@ def tranfer_torch_to_quantization(nn_instance, quant_module):
     return quant_instances
 
 
-import re
-
-
-def quantization_ignore_match(ignore_layer, path):
-    if ignore_layer is None:
-        return False
-    if isinstance(ignore_layer, str) or isinstance(ignore_layer, list):
-        if isinstance(ignore_layer, str):
-            ignore_layer = [ignore_layer]
-        if path in ignore_layer:
-            return True
-        for item in ignore_layer:
-            if re.match(item, path):
-                return True
-    return False
-
-
 def torch_module_find_quant_module(model, module_list, ignore_layer, prefix=''):
     for name in model._modules:
         submodule = model._modules[name]

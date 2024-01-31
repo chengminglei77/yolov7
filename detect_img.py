@@ -15,6 +15,7 @@ import uuid
 from Report import HttpCode, Error, Result
 from detect_img_streams import recognize_head
 from models.experimental import attempt_load
+from utils.compute_intersection import check_in_area
 from utils.datasets import letterbox, LoadImages
 from utils.general import check_img_size, non_max_suppression, scale_coords
 from utils.recongnized_color import identify_color
@@ -153,6 +154,7 @@ def init_model():
     # Initialize
     for item in _weights:
         d1, size = parse_model_config(item)
+        print(item, d1, size)
         # Load model
         _models[item] = attempt_load(_weights[item], map_location=d1)  # load FP32 model
         # 优化模型
@@ -402,7 +404,7 @@ def detect_cap(images, _conf_thres=0.25, _iou_thres=0.45, _agnostic_nms=False, i
 
 # 识别模型video
 def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
-               _agnostic_nms=False, is_cut=False, is_debug=False, is_hidden=False, points=[]):
+               _agnostic_nms=False, is_cut=False, is_debug=False, is_hidden=False, points=[], alarm_type=''):
     global _models
     global _labels_config
     try:
@@ -415,11 +417,13 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
         if is_padding:
             # top buttom left right
             img = cv2.copyMakeBorder(img, 30, 30, 30, 30, cv2.BORDER_CONSTANT, value=[255, 255, 255])
-        if len(points) == 4 and is_hidden:
-            mask = np.zeros_like(img)
-            mask[points[1]:points[3], points[0]:points[2]] = img[points[1]:points[3], points[0]:points[2]]
-            img = mask
+        # if len(points) == 4 and is_hidden:
+        #     mask = np.zeros_like(img)
+        #     mask[points[1]:points[3], points[0]:points[2]] = img[points[1]:points[3], points[0]:points[2]]
+        #     img = mask
         if is_debug:
+            print(points[0], points[1], points[2], points[3])
+            cv2.rectangle(img, (points[0], points[1]), (points[2], points[3]), (60, 60, 200), thickness=2)
             cv2.imwrite(f'{_debug_img_path}video-{uuid.uuid4()}.jpg', img)
         im0 = img.copy()
 
@@ -458,10 +462,10 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
                 for *xyxy, conf, cls in reversed(det):
                     label_name = names[int(cls)]  # 类别
                     conf_val = float(conf)  # 置信度
-                    if label_name not in _labels_config:
-                        continue
-                    if conf_val < parse_label_conf_value(labelName=label_name):
-                        continue
+                    # if label_name not in _labels_config:
+                    #     continue
+                    # if conf_val < parse_label_conf_value(labelName=label_name):
+                    #     continue
                     result[change_txt[label_name]] = result.get(change_txt[label_name], 0) + 1
                     if 'success' not in result:
                         result['success'] = True
@@ -472,19 +476,41 @@ def detect_img(img_path, _conf_thres=0.25, is_padding=False, _iou_thres=0.45,
                             "conf_val": conf_val,
                             "area": (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0])),
                             "points": xyxy,
+                            "xyxy": [[int(xyxy[0]), int(xyxy[1])], [int(xyxy[2]), int(xyxy[3])]],
                             "value": conf_val * (int(xyxy[3]) - int(xyxy[1])) * (int(xyxy[2]) - int(xyxy[0]))
                         })
+
+                if alarm_type == 'person_off_duty_querying' and is_hidden and 'person' in result:
+                    p1 = [[points[0], points[1]], [points[2], points[3]]]
+                    ps = [item for item in persons if
+                          check_in_area(p1, item['xyxy'], image_h=t_size[0], image_w=t_size[1],
+                                        min_rate=0.75)]
+                    if len(ps) > 0:
+                        result['person'] = len(ps)
+                    else:
+                        del result['person']
                 if len(persons) >= 1:
                     params = {
                         "images": persons,
                         "is_debug": is_debug
                     }
-                    future1 = pool.submit(lambda x: detect_cap(**x), params)
-                    future2 = pool.submit(lambda x: detect_uniform(**x), params)
-                    # 获取安全帽信息
-                    result['cap'] = future1.result()
+                    if alarm_type == 'no_uniform':
+                        future2 = pool.submit(lambda x: detect_uniform(**x), params)
+                        result.update(future2.result())
+                    if alarm_type == 'no_safetycap' and len(points) == 4:
+                        t_size = imgOs.shape
+                        p1 = [[points[0], points[1]], [points[2], points[3]]]
+
+                        params["images"] = [item for item in persons if
+                                            check_in_area(p1, item['xyxy'], image_h=t_size[0], image_w=t_size[1],
+                                                          min_rate=0.75)]
+                        if len(params['images']):
+                            future1 = pool.submit(lambda x: detect_cap(**x), params)
+                            # 获取安全帽信息
+                            result['cap'] = future1.result()
+                        else:
+                            del result['person']
                     # 获取工服信息
-                    result.update(future2.result())
 
         if 'success' not in result:
             result['success'] = False
@@ -521,12 +547,14 @@ def petrochemical_predict():
         if alarm_type == 'person_off_duty_querying':
             is_hidden = True
             points = eval(points)
+        if alarm_type == 'no_safetycap':
+            points = eval(points)
         # if image_type == -1 and alarm_type == 'person_off_duty_querying':
         #     is_cut = False
         # else:
         #     is_cut = (int(image_type) == 1)
         is_padding = False
-        if alarm_type in ['no_safetycap', 'no_uniform']:
+        if alarm_type in ['no_uniform']:
             is_padding = True
 
         results = []
@@ -540,7 +568,7 @@ def petrochemical_predict():
             img_name = f"./{str(uuid.uuid4())}.jpg"
             file.save(img_name)
             result = detect_img(img_name, is_padding=is_padding, is_cut=False, is_debug=is_debug, is_hidden=is_hidden,
-                                points=points)
+                                points=points, alarm_type=alarm_type)
             results.append(result)
         end_time = time.time()
         return Result(HttpCode.ok, "预测成功", cost=round(float(end_time - start), 3), data=results)
