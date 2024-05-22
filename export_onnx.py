@@ -18,7 +18,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--weights', type=str, default='./weights/video.pt', help='weights path')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='image size')  # height, width
-    parser.add_argument('--batch-size', type=int, default=1, help='batch size')
+    parser.add_argument('--batch-size', type=int, default=4, help='batch size')
     parser.add_argument('--max-obj', type=int, default=100, help='topk')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='nms iou threshold')
     parser.add_argument('--score-thres', type=float, default=0.25, help='nms score threshold')
@@ -68,7 +68,10 @@ if __name__ == '__main__':
                           do_constant_folding=True,
                           input_names=['images'],
                           output_names=['num_dets', 'det_boxes', 'det_scores', 'det_classes'],
-                          dynamic_axes=None)
+                          dynamic_axes={'images': {0: 'batch'}, 'num_dets': {0: 'batch'},
+                                        'det_boxes': {0: 'batch'},
+                                        'det_scores': {0: 'batch'},
+                                        'det_classes': {0: 'batch'}})
 
         # Checks
         onnx_model = onnx.load(f)  # load onnx model
