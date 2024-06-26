@@ -36,7 +36,7 @@ def draw_box_string(img, box, msg):
 img = cv2.imread('test.jpg')
 a = []
 b = []
-ps = [[450, 600], [780, 710]]
+ps = [[550, 200], [800, 350]]
 
 cv2.rectangle(img, ps[0], ps[1], (0, 255, 0), 3)
 cv2.namedWindow('test', cv2.WINDOW_NORMAL)

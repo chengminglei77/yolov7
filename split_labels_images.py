@@ -17,7 +17,7 @@ def move_images_without_labels(old_img_path: str, old_label_path: str, new_path:
     if not os.path.exists(new_path):
         os.mkdir(new_path)
     # 获取标注的图片名称
-    image_with_labels = get_paths(old_label_path, old_suffix='txt', new_suffix='jpg')
+    image_with_labels = get_paths(old_label_path, old_suffix='.txt', new_suffix='.jpg')
     # image_with_labels.extend(get_paths(old_label_path, old_suffix='txt', new_suffix='png'))
     # image_with_labels.extend(get_paths(old_label_path, old_suffix='txt', new_suffix='JPG'))
     # 额外配置的label文件
@@ -32,9 +32,9 @@ def move_images_without_labels(old_img_path: str, old_label_path: str, new_path:
 def move_images_with_labels(label_path, image_path, to_path):
     if not os.path.exists(to_path):
         os.mkdir(to_path)
-    image_with_labels = get_paths(label_path, old_suffix='txt', new_suffix='jpg')
-    image_with_labels.extend(get_paths(label_path, old_suffix='txt', new_suffix='png'))
-    image_with_labels.extend(get_paths(label_path, old_suffix='txt', new_suffix='JPG'))
+    image_with_labels = get_paths(label_path, old_suffix='.txt', new_suffix='.jpg')
+    image_with_labels.extend(get_paths(label_path, old_suffix='.txt', new_suffix='.png'))
+    image_with_labels.extend(get_paths(label_path, old_suffix='.txt', new_suffix='.JPG'))
     # 获取目录下的所有文件
     images = get_paths(image_path)
     for item in image_with_labels:
@@ -46,9 +46,9 @@ def clear_labels_without_images(old_img_path: str, old_label_path: str):
     if not os.path.exists(old_img_path) or not os.path.exists(old_label_path):
         raise ValueError("图片或者标注路径不存在,请确认后重试")
     # 获取标注的图片名称
-    images = get_paths(old_img_path, old_suffix='jpg', new_suffix='txt')
-    images.extend(get_paths(old_img_path, old_suffix='JPG', new_suffix='txt'))
-    images.extend(get_paths(old_img_path, old_suffix='png', new_suffix='txt'))
+    images = get_paths(old_img_path, old_suffix='.jpg', new_suffix='.txt')
+    images.extend(get_paths(old_img_path, old_suffix='.JPG', new_suffix='.txt'))
+    images.extend(get_paths(old_img_path, old_suffix='.png', new_suffix='.txt'))
     labels = get_paths(old_label_path)
     for item in labels:
         if item not in images:
@@ -73,6 +73,9 @@ def test_clear_labels_without_images(old_img_path="D://project//python//datasets
 
 
 if __name__ == '__main__':
-    clear_labels_without_images(old_img_path="D://data//少荃体育//person20240116//images",
-                                old_label_path="D://data//少荃体育//person20240116//labels",
-                              )
+    # clear_labels_without_images(old_img_path="D://data//少荃体育//person20240116//images",
+    #                             old_label_path="D://data//少荃体育//person20240116//labels",
+    #                           )
+    clear_labels_without_images(old_img_path='E:\\datasets\\zh_extra\\anquanmao\\images',
+                                old_label_path='E:\\datasets\\zh_extra\\anquanmao\\labels')
+

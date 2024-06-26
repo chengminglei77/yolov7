@@ -17,14 +17,17 @@ from utils.torch_utils import select_device, load_classifier, time_synchronized,
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-LABLES = ['person']  # 需要判断的目标信息
+LABLES = ['person', 'person_head', 'clothes_upper', 'clothes_lower']  # 需要判断的目标信息
+# LABLES = ['car']  # 需要判断的目标信息
 RULE_TYPE = 'personoffDuty'  # 报警规则
+RULE_TYPE = 'carDuty'  # 报警规则
 # ROI = [[600, 620], [1400, 1440]]  # 报警区域
 # ROI = [[1440, 80], [2200, 550]]  # 主码流报警区域
 # ROI = [[130, 130], [390, 330]]  # 子码流，报警区域
 # ROI = [[640, 320], [1000, 700]]  # 前台，报警区域
 # ROI = [[380, 320], [780, 700]]  # 中韩现场画面，报警区域
-ROI = [[450, 600], [780, 710]]  # 监控室画面，报警区域
+# ROI = [[450, 600], [780, 710]]  # 监控室画面，报警区域
+ROI = [[550, 200], [800, 350]]  # 车辆违停，报警区域
 COLORS = [
 
     (0, 255, 0),  # 绿色
@@ -108,6 +111,36 @@ def plot_one_box1(imgInfos):
                 status = True
                 color = 1
         return status, message, color, ps
+    elif RULE_TYPE == 'carDuty':
+        ps = ROI
+        color = 0
+        status = True
+        if len(imgInfos) > 0:
+            message = '车辆违停'
+            # 获取区域坐标
+            x1 = ROI[0][0]
+            y1 = ROI[0][1]
+            x2 = ROI[1][0]
+            y2 = ROI[1][1]
+            flag = False
+            for item in imgInfos:
+                xyxy = item.get('xyxy')
+                x3 = int(xyxy[0])
+                y3 = int(xyxy[1])
+                x4 = int(xyxy[2])
+                y4 = int(xyxy[3])
+                # 区域内存在目标
+                if is_rect_cross(x1, y1, x2, y2, x3, y3, x4, y4):
+                    # 修改颜色为红色
+                    flag = True
+                    break
+            if flag:
+                status = True
+                color = 1
+            else:
+                color = 0
+                message = ''
+        return status, message, color, ps
     else:
         return status, message, color, ps
 
@@ -168,7 +201,7 @@ def detect():
                '-vcodec', 'rawvideo',
                '-pix_fmt', 'bgr24',
                '-s', sizeStr,
-               '-r', '24',
+               '-r', '12',
                '-i', '-',
                # '-b_ref_mode', '0',
                '-c:v', 'libx264',  # 'libx265','libx264','hevc_nvenc','h264_nvenc'
@@ -254,43 +287,46 @@ def detect():
                 imgInfos = []
                 for *xyxy, conf, cls in reversed(det):
 
-                    if names[int(cls)] in LABLES and conf > 0.45:
+                    if names[int(cls)] in LABLES and conf > 0.25:
                         imgInfos.append({
                             'label': names[int(cls)],  # 目标标签
                             'conf': conf,  # 置信度
                             'xyxy': xyxy,  # 目标坐标
                         })
-                        label = f'{names[int(cls)]} {conf:.2f}'
+                        if names[int(cls)] != 'person':
+                            label = f'blue_{names[int(cls)]} {conf:.2f}'
+                        else:
+                            label = f'{names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=1)
                 # 进行逻辑判断，是否触发报警,返回颜色和坐标信息
-                status, message, index, ps = plot_one_box1(imgInfos)
-                if message != '':
-                    box = []
-                    box.extend(ps[0])
-                    box.extend(ps[1])
-                    print(box)
-                    im0 = draw_box_string(im0, box, message)
-                try:
-                    cv2.rectangle(im0, ps[0], ps[1], COLORS[index], 3)
-                except:
-                    print(ps)
+                # status, message, index, ps = plot_one_box1(imgInfos)
+                # if message != '':
+                #     box = []
+                #     box.extend(ps[0])
+                #     box.extend(ps[1])
+                #     print(box)
+                #     im0 = draw_box_string(im0, box, message)
+                # try:
+                #     cv2.rectangle(im0, ps[0], ps[1], COLORS[index], 3)
+                # except:
+                #     print(ps)
 
-                print(status, message, index, ps)
-            else:
-                # 补丁1-没有识别到目标时，如果配置了人员离岗，按照人员离岗显示
-                status, message, index, ps = plot_one_box1([])
-                if message != '':
-                    box = []
-                    box.extend(ps[0])
-                    box.extend(ps[1])
-                    print(box)
-                    im0 = draw_box_string(im0, box, message)
-                try:
-                    cv2.rectangle(im0, ps[0], ps[1], COLORS[index], 3)
-                except:
-                    print(ps)
-
-                print(status, message, index, ps)
+                # print(status, message, index, ps)
+            # else:
+            #     # 补丁1-没有识别到目标时，如果配置了人员离岗，按照人员离岗显示
+            #     status, message, index, ps = plot_one_box1([])
+            #     if message != '':
+            #         box = []
+            #         box.extend(ps[0])
+            #         box.extend(ps[1])
+            #         print(box)
+            #         im0 = draw_box_string(im0, box, message)
+            #     try:
+            #         cv2.rectangle(im0, ps[0], ps[1], COLORS[index], 3)
+            #     except:
+            #         print(ps)
+            #
+            #     print(status, message, index, ps)
             fps_counter += 1  # 计算帧数
             if (time.time() - start_time) != 0:  # 实时显示帧数
                 out_fps = fps_counter / (time.time() - start_time)
@@ -328,17 +364,17 @@ def detect():
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', nargs='+', type=str, default='weights/yolov7_training.pt',
+    parser.add_argument('--weights', nargs='+', type=str, default='weights/video.pt',
                         help='model.pt path(s)')
     parser.add_argument('--source', type=str,
                         # default="rtsp://admin:webuild1234@192.168.1.64:554/h264/ch1/sub/av_stream"
                         # default="rtsp://192.168.1.85:10054/live/TzChAdfSR"
-                        default="datasets/4.mp4"
+                        default="datasets/video5.mp4"
                         , help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-    parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+    parser.add_argument('--device', default='0', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
     parser.add_argument('--view-img', action='store_true', help='display results')
     parser.add_argument('--save-txt', action='store_true', help='save results to *.txt')
     parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')

@@ -18,7 +18,7 @@ from utils.add_nms import RegisterNMS
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='./weights/model1_p5_640_0415.pt', help='weights path')
+    parser.add_argument('--weights', type=str, default='./weights/video.pt', help='weights path')
     parser.add_argument('--img-size', nargs='+', type=int, default=[704, 704], help='image size')  # height, width
     parser.add_argument('--batch-size', type=int, default=32, help='batch size')
     parser.add_argument('--dynamic', action='store_true', help='dynamic ONNX axes')

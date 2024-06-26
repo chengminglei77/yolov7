@@ -18,10 +18,10 @@ from pycocotools.cocoeval import COCOeval
 
 def argsparser():
     parser = argparse.ArgumentParser(prog=__file__)
-    parser.add_argument('--gt_path', type=str, default='E:/project/python/tpu/YOLOv7/datas/train.json',
+    parser.add_argument('--gt_path', type=str, default='train.json',
                         help='path of label json')
     parser.add_argument('--result_json', type=str,
-                        default='E:/project/python/tpu/YOLOv7/datas/fp16_1b_test.json',
+                        default='v7_labels.json',
                         help='path of result json')
     parser.add_argument('--ann_type', type=str, default='bbox', help='type of evaluation')
     args = parser.parse_args()
@@ -30,16 +30,14 @@ def argsparser():
 
 def coco80_to_coco91_class():  # converts 80-index (val2014) to 91-index (paper)
     # https://tech.amikelive.com/node-718/what-object-categories-labels-are-in-coco-dataset/
-    x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 14, 15, 16, 17, 18, 19, 20,
-         21, 22]
+    x = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
     return x
 
 
 def convert_to_coco_keypoints(json_file, cocoGt):
     keypoints_openpose_map = ["nose", "Neck", "right_shoulder", "right_elbow", "right_wrist", "left_shoulder",
-                              "left_elbow", "left_wrist", \
-                              "right_hip", "right_knee", "right_ankle", "left_hip", "left_knee", "left_ankle",
-                              "right_eye", "left_eye", "right_ear", "left_ear"]
+                              "left_elbow", "left_wrist",
+                              "right_hip", "right_knee", "right_ankle"]
     temp_json = []
     images_list = cocoGt.dataset["images"]
     with open(json_file, 'r') as f:
@@ -128,6 +126,11 @@ def main(args):
         cocoEval.accumulate()  # 累积评估结果
         print(f"Category ID: {catId}")
         cocoEval.summarize()  # 输出当前类别的评估结果摘要
+
+    print('-------')
+    cocoEval.evaluate()
+    cocoEval.accumulate()
+    cocoEval.summarize()
 
 
 if __name__ == '__main__':
