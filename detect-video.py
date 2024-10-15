@@ -17,7 +17,7 @@ from utils.torch_utils import select_device, load_classifier, time_synchronized,
 from PIL import Image, ImageDraw, ImageFont
 import numpy as np
 
-LABLES = ['person', 'person_head', 'clothes_upper', 'clothes_lower']  # 需要判断的目标信息
+LABLES = ['person']  # 需要判断的目标信息
 # LABLES = ['car']  # 需要判断的目标信息
 RULE_TYPE = 'personoffDuty'  # 报警规则
 RULE_TYPE = 'carDuty'  # 报警规则
@@ -369,7 +369,7 @@ if __name__ == '__main__':
     parser.add_argument('--source', type=str,
                         # default="rtsp://admin:webuild1234@192.168.1.64:554/h264/ch1/sub/av_stream"
                         # default="rtsp://192.168.1.85:10054/live/TzChAdfSR"
-                        default="datasets/video5.mp4"
+                        default="datasets/zc_down.mp4"
                         , help='source')  # file/folder, 0 for webcam
     parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
     parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')

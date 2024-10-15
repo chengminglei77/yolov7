@@ -33,14 +33,14 @@ def draw_box_string(img, box, msg):
     return img
 
 
-img = cv2.imread('test.jpg')
+img = cv2.imread('datasets/cap/123.jpg')
 a = []
 b = []
-ps = [[550, 200], [800, 350]]
-
+ps = [[0, 100], [400, 400]]
+print(img.shape)
 cv2.rectangle(img, ps[0], ps[1], (0, 255, 0), 3)
 cv2.namedWindow('test', cv2.WINDOW_NORMAL)
-cv2.resizeWindow('test', 1080, 600)
+# cv2.resizeWindow('test', 1080, 600)
 cv2.imshow('test', img)
 cv2.waitKey(0)
 cv2.destroyWindow('test')

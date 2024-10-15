@@ -16,9 +16,9 @@ sys.path.append('./')  # to run '$ python *.py' files in subdirectories
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    parser.add_argument('--weights', type=str, default='./weights/video.pt', help='weights path')
+    parser.add_argument('--weights', type=str, default='./weights/best_all.pt', help='weights path')
     parser.add_argument('--img-size', nargs='+', type=int, default=[640, 640], help='image size')  # height, width
-    parser.add_argument('--batch-size', type=int, default=4, help='batch size')
+    parser.add_argument('--batch-size', type=int, default=20, help='batch size')
     parser.add_argument('--max-obj', type=int, default=100, help='topk')
     parser.add_argument('--iou-thres', type=float, default=0.45, help='nms iou threshold')
     parser.add_argument('--score-thres', type=float, default=0.25, help='nms score threshold')

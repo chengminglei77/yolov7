@@ -1,7 +1,7 @@
 import os
 
 directorys = [
-    "E:\\datasets\\zh_extra\\anquanmao\\labels",
+    # "E:\\datasets\\zh_extra\\anquanmao\\labels",
     # "E:\\datasets\\zh_extra\\chouyan\\labels",
     # "E:\\datasets\\zh_extra\\leifengmao\\labels",
     # "E:\\datasets\\zh_extra\\person\\person1\\labels",
@@ -13,12 +13,12 @@ directorys = [
     # "E:\\datasets\\zh_extra\\shuaidao\\labels",
     # "E:\\datasets\\zh_extra\\sleeping\\labels",
     # "E:\\datasets\\zh_extra\\yanwu\\labels",
-    # "E:\\datasets\\zh_extra\\jiyouxielou\\labels",
+    "E:\\datasets\\zh_extra\\jiyouxielou\\labels",
 ]  # 目录路径
 # 2>6    3>8
 is_all_change = False
-label_raw_value = "14"  # 原始标签
-label_value = "8"  # 新标签值
+label_raw_value = "0"  # 原始标签
+label_value = "12"  # 新标签值
 distinct_labels = set()
 del_directorys = [
     'images\\project\\project_zhonghan\\01\\labels',
@@ -155,7 +155,7 @@ def find_label():
 # 去除不需要的标签
 # remove_label()
 # 替换标签号
-# replace_label()
+replace_label()
 # 查看标签
-find_label()
+# find_label()
 print("Done!")
